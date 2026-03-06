@@ -12,7 +12,12 @@ export class S3Service {
   private readonly localBaseDir: string;
 
   constructor(private readonly config: ConfigService) {
-    this.localMode = this.config.get("LOCAL_FILE_STORAGE", "false") === "true";
+    const localStorageRaw = (this.config.get("LOCAL_FILE_STORAGE") || "").toLowerCase();
+    this.localMode =
+      localStorageRaw === "true" ||
+      localStorageRaw === "1" ||
+      localStorageRaw === "yes" ||
+      (!localStorageRaw && this.config.get("NODE_ENV", "development") !== "production");
     this.localBaseDir = join(process.cwd(), ".local-storage");
     this.bucket = this.config.get("S3_BUCKET", "signhub");
     this.client = new S3Client({

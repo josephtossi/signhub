@@ -1,191 +1,105 @@
-# SignHub Monorepo Scaffold
+# SignHub
 
-## 1) Folder structure
+Monorepo for an electronic signature platform with:
+- `apps/web` (Next.js 14)
+- `apps/api` (NestJS)
+- `packages/database` (Prisma)
 
-```text
-signhub/
-  apps/
-    api/                    # NestJS backend
-      src/
-        auth/
-        users/
-        organizations/
-        documents/
-        envelopes/
-        signing/
-        audit/
-        notifications/
-        common/
-    web/                    # Next.js frontend
-      app/
-        dashboard/
-        upload/
-        prepare/[envelopeId]/
-        sign/[token]/
-        tracking/[envelopeId]/
-      components/
-      lib/
-  packages/
-    config/                 # shared tsconfig presets
-    database/               # Prisma schema + client package
-      prisma/schema.prisma
-    ui/                     # shared UI components
-  docker-compose.yml
-  .env.example
-  turbo.json
-```
+## Run locally (no Docker)
 
-## 2) Developer quick start (local)
+This project can run fully without Docker using:
+- SQLite database
+- local filesystem storage (instead of S3/MinIO)
+- queues disabled (no Redis required)
 
-Prerequisites:
+### Prerequisites
 - Node.js 20+
-- Docker Desktop (recommended for Postgres/Redis/MinIO)
+- pnpm (`corepack` recommended)
 
-1. Copy env file.
-```bash
-cp .env.example .env
-```
+### 1) Install deps
 
-2. Ensure pnpm is available.
-- If `pnpm` is already installed:
-```bash
-pnpm -v
-```
-- If not installed (Node 18+):
-```bash
-corepack prepare pnpm@9.12.3 --activate
-corepack pnpm -v
-```
-
-3. Install dependencies.
 ```bash
 corepack pnpm install
 ```
 
-4. Start infrastructure only (Postgres, Redis, MinIO).
-```bash
-docker compose up -d postgres redis minio createbucket
+### 2) Configure env
+
+Create `.env` in repo root:
+
+```env
+NODE_ENV=development
+DATABASE_URL=file:./packages/database/prisma/dev.db
+
+DISABLE_QUEUES=true
+REDIS_URL=redis://localhost:6379
+
+PORT=4000
+JWT_ACCESS_SECRET=replace-with-strong-access-secret
+JWT_REFRESH_SECRET=replace-with-strong-refresh-secret
+SIGN_URL_BASE=http://localhost:3001/sign
+
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=minio
+AWS_SECRET_ACCESS_KEY=minio123
+S3_BUCKET=signhub
+S3_ENDPOINT=http://localhost:9000
+LOCAL_FILE_STORAGE=true
+
+NEXT_PUBLIC_API_URL=http://localhost:4000/v1
+WEB_APP_URL=http://localhost:3001
 ```
 
-5. Generate Prisma client.
+### 3) Initialize Prisma DB
+
 ```bash
-corepack pnpm db:generate
+corepack pnpm --filter @signhub/database db:push
 ```
 
-6. Run API and web in dev mode.
+### 4) Start API
+
 ```bash
-corepack pnpm dev
+corepack pnpm --filter @signhub/api dev
 ```
 
-URLs:
-- Web: `http://localhost:3000`
-- API: `http://localhost:4000/v1`
-- MinIO console: `http://localhost:9001`
+API health:
+- `http://localhost:4000` -> `{"service":"signhub-api","status":"ok","baseUrl":"/v1"}`
 
-## 3) Docker full stack
+### 5) Start Web
 
-Run everything in containers:
+In a second terminal:
+
 ```bash
-docker compose up --build
+corepack pnpm --filter @signhub/web exec next dev -p 3001
 ```
 
-Stop:
-```bash
-docker compose down
-```
+Web URL:
+- `http://localhost:3001`
 
-Reset volumes:
-```bash
-docker compose down -v
-```
+## Core API routes (current)
 
-## 4) Prisma models included
-
-- `users`
-- `organizations`
-- `organization_users`
-- `documents`
-- `document_versions`
-- `envelopes`
-- `recipients`
-- `fields`
-- `signatures`
-- `audit_logs`
-- `templates`
-
-## 5) Basic working endpoints
-
-- `POST /v1/auth/register`
+- `POST /v1/auth/signup`
 - `POST /v1/auth/login`
-- `POST /v1/auth/refresh`
-- `GET /v1/users`
-- `POST /v1/organizations`
-- `GET /v1/organizations`
-- `POST /v1/documents`
-- `POST /v1/documents/:id/upload` (multipart form-data key `file`)
-- `GET /v1/documents/:id/versions/latest`
-- `GET /v1/documents/:id/versions/latest/file`
-- `GET /v1/documents?organizationId=<id>`
+- `POST /v1/auth/logout`
+- `GET /v1/auth/me`
+- `GET /v1/dashboard`
+- `POST /v1/documents` (JSON create or multipart upload+create)
+- `POST /v1/documents/upload` (multipart upload+create)
 - `POST /v1/envelopes`
-- `POST /v1/envelopes/:id/send`
-- `GET /v1/envelopes/:id/status`
-- `GET /v1/envelopes/:id/fields`
-- `POST /v1/envelopes/:id/fields`
-- `GET /v1/sign/:token/session`
-- `POST /v1/sign/:token/submit`
-- `POST /v1/sign/:token/complete`
-- `GET /v1/audit/envelope/:envelopeId`
-- `POST /v1/notifications/email/test`
-- `POST /v1/notifications/webhook/test`
+- `POST /v1/envelopes/send`
+- `GET /v1/envelopes/:id`
+- `POST /v1/sign/:token`
+- `POST /v1/ai/analyze-document`
+- `POST /v1/ai/chat`
+- `POST /v1/ai/explain-clause`
 
-## 6) Developer workflow
+## Quick manual test (PowerShell)
 
-1. Create a user and login from [docs/api-examples.http](./docs/api-examples.http).
-2. Use the returned access token on the Upload page.
-3. Upload a PDF.
-4. The app creates:
-- `documents` row
-- `document_versions` row with SHA256
-- `envelopes` row
-5. In `/prepare/{envelopeId}` drag the signature field onto the PDF.
-6. Click `Save Field Coordinates` to persist to `fields`.
+Signup:
 
-## 7) Troubleshooting
-
-- BullMQ + Redis queue is configured in `apps/api/src/notifications/notifications.service.ts`.
-- S3 integration uses `@aws-sdk/client-s3` and supports MinIO via `S3_ENDPOINT`.
-- Shared UI package is consumed by Next.js with `transpilePackages`.
-- If `pnpm` is not found, use `corepack pnpm ...` commands.
-- If Docker ports are busy, free ports `3000`, `4000`, `5432`, `6379`, `9000`, `9001`.
-- If `3000` is in use, run web on another port:
-```bash
-corepack pnpm --filter @signhub/web exec next dev -p 3001
-```
-- If API exits with `P1001` or `ECONNREFUSED`, start infra first:
-```bash
-docker compose up -d postgres redis minio createbucket
-```
-- If Prisma fails, verify `DATABASE_URL` in `.env` and that Postgres container is running.
-
-## 8) No-Docker demo mode
-
-If you only want to try the flow quickly without Postgres/Redis/MinIO:
-
-1. Start web:
-```bash
-corepack pnpm --filter @signhub/web exec next dev -p 3001
+```powershell
+$body = @{ email="you@example.com"; password="Passw0rd!23"; firstName="First"; lastName="Last" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://localhost:4000/v1/auth/signup" -ContentType "application/json" -Body $body
 ```
 
-2. Start mock API:
-```bash
-cd apps/api
-corepack pnpm --filter @signhub/api exec node mock-server.cjs
-```
-
-Demo URLs:
-- Web: `http://localhost:3001`
-- Mock API: `http://localhost:4000`
-
-Notes:
-- This mock API supports upload + prepare + save fields endpoints used by the web app.
-- Data is in-memory (resets when mock server restarts).
+If `Cannot GET /` appears on API root, your API binary is outdated or not restarted.
+If `Cannot POST /documents`, use `POST /v1/documents` or `POST /v1/documents/upload`.

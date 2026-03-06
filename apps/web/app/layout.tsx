@@ -21,6 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               </Link>
               <nav className="flex gap-6 text-sm font-medium text-slate-600">
                 <Link href="/dashboard">Dashboard</Link>
+                <Link href="/drafts">Drafts</Link>
                 <Link href="/upload">Upload</Link>
                 <Link href="/tracking">Tracking</Link>
               </nav>

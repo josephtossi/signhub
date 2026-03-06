@@ -68,16 +68,16 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 md:grid-cols-4">
         {[
-          ["Needs My Signature", data.counts.needsMySignature, "from-amber-400 to-orange-500"],
-          ["Waiting For Others", data.counts.waitingForOthers, "from-blue-500 to-indigo-600"],
-          ["Completed", data.counts.completed, "from-emerald-400 to-green-600"],
-          ["Drafts", data.counts.drafts, "from-slate-400 to-slate-600"]
-        ].map(([label, value, gradient]) => (
-          <div key={String(label)} className="glass rounded-xl border border-white/70 p-5 shadow-sm">
+          ["Needs My Signature", data.counts.needsMySignature, "from-amber-400 to-orange-500", "/tracking"],
+          ["Waiting For Others", data.counts.waitingForOthers, "from-blue-500 to-indigo-600", "/tracking"],
+          ["Completed", data.counts.completed, "from-emerald-400 to-green-600", "/tracking"],
+          ["Drafts", data.counts.drafts, "from-slate-400 to-slate-600", "/drafts"]
+        ].map(([label, value, gradient, href]) => (
+          <Link key={String(label)} href={String(href)} className="glass rounded-xl border border-white/70 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
             <div className={`mb-3 h-1.5 rounded-full bg-gradient-to-r ${gradient}`} />
             <p className="text-sm text-slate-500">{label}</p>
             <p className="mt-1 text-3xl font-semibold">{value}</p>
-          </div>
+          </Link>
         ))}
       </section>
 
@@ -91,7 +91,7 @@ export default function DashboardPage() {
         <div className="space-y-2">
           {data.recent.map((item) => (
             <Link
-              href={`/tracking/${item.id}`}
+              href={item.status === "DRAFT" ? `/prepare/${item.id}` : `/tracking/${item.id}`}
               key={item.id}
               className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 p-3 transition hover:bg-white"
             >
@@ -111,4 +111,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

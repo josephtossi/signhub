@@ -16,7 +16,7 @@ export class SigningService {
   async getSession(token: string) {
     const recipient = await this.prisma.recipient.findFirst({
       where: { accessToken: token },
-      include: { envelope: true }
+      include: { envelope: true, fields: true }
     });
     if (!recipient) throw new NotFoundException("Invalid token");
     if (recipient.status === "PENDING" || recipient.status === "SENT") {

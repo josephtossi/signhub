@@ -5,36 +5,75 @@ import * as pdfjsLib from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs";
 
-export type SignatureField = {
+export type DraftFieldType = "SIGNATURE" | "INITIAL" | "DATE" | "TEXT" | "CHECKBOX";
+
+export type DraftField = {
   id: string;
+  recipientId?: string;
+  type: DraftFieldType;
   page: number;
   x: number;
   y: number;
   width: number;
   height: number;
+  label?: string;
+  required?: boolean;
+  value?: string;
 };
 
 type Props = {
   fileUrl: string;
-  fields: SignatureField[];
-  setFields: (fields: SignatureField[]) => void;
+  fields: DraftField[];
+  selectedFieldId: string | null;
+  onSelectField: (id: string | null) => void;
+  onFieldsChange: (fields: DraftField[]) => void;
+  onError: (message: string) => void;
 };
 
-export function PdfPrepareCanvas({ fileUrl, fields, setFields }: Props) {
+const defaultSize: Record<DraftFieldType, { w: number; h: number }> = {
+  SIGNATURE: { w: 0.25, h: 0.08 },
+  INITIAL: { w: 0.16, h: 0.08 },
+  DATE: { w: 0.2, h: 0.06 },
+  TEXT: { w: 0.3, h: 0.06 },
+  CHECKBOX: { w: 0.05, h: 0.05 }
+};
+
+type DragMode = {
+  id: string;
+  kind: "move" | "resize";
+  startX: number;
+  startY: number;
+  startField: DraftField;
+};
+
+function clamp(v: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, v));
+}
+
+export function PdfPrepareCanvas({
+  fileUrl,
+  fields,
+  selectedFieldId,
+  onSelectField,
+  onFieldsChange,
+  onError
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragMode, setDragMode] = useState<DragMode | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     async function render() {
+      setLoading(true);
       const loadingTask = pdfjsLib.getDocument({
         url: fileUrl,
         withCredentials: true
       });
       const pdf = await loadingTask.promise;
       const page = await pdf.getPage(1);
-      const viewport = page.getViewport({ scale: 1.25 });
+      const viewport = page.getViewport({ scale: 1.35 });
       const canvas = canvasRef.current;
       if (!canvas) return;
       const context = canvas.getContext("2d");
@@ -43,50 +82,89 @@ export function PdfPrepareCanvas({ fileUrl, fields, setFields }: Props) {
       canvas.height = viewport.height;
       setCanvasSize({ width: viewport.width, height: viewport.height });
       await page.render({ canvasContext: context, viewport }).promise;
+      setLoading(false);
     }
-    render().catch(() => null);
-  }, [fileUrl]);
+
+    render().catch((e: unknown) => {
+      const message = e instanceof Error ? e.message : "Could not render PDF";
+      setLoading(false);
+      onError(message);
+    });
+  }, [fileUrl, onError]);
+
+  useEffect(() => {
+    function onMouseUp() {
+      setDragMode(null);
+    }
+    window.addEventListener("mouseup", onMouseUp);
+    return () => window.removeEventListener("mouseup", onMouseUp);
+  }, []);
 
   function addField(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    if (event.dataTransfer.getData("application/x-signature-field") !== "SIGNATURE") return;
+    const type = event.dataTransfer.getData("application/x-field-type") as DraftFieldType;
+    if (!type) return;
+
     const wrapper = wrapperRef.current;
     if (!wrapper || canvasSize.width === 0 || canvasSize.height === 0) return;
-    const rect = wrapper.getBoundingClientRect();
-    const xPx = event.clientX - rect.left;
-    const yPx = event.clientY - rect.top;
-    const widthPx = 160;
-    const heightPx = 48;
 
-    const field: SignatureField = {
+    const rect = wrapper.getBoundingClientRect();
+    const x = clamp((event.clientX - rect.left) / canvasSize.width, 0, 1);
+    const y = clamp((event.clientY - rect.top) / canvasSize.height, 0, 1);
+    const size = defaultSize[type];
+    const next: DraftField = {
       id: crypto.randomUUID(),
+      type,
       page: 1,
-      x: Math.max(0, Math.min(1, xPx / canvasSize.width)),
-      y: Math.max(0, Math.min(1, yPx / canvasSize.height)),
-      width: widthPx / canvasSize.width,
-      height: heightPx / canvasSize.height
+      x,
+      y,
+      width: size.w,
+      height: size.h,
+      required: true
     };
-    setFields([...fields, field]);
+    onFieldsChange([...fields, next]);
+    onSelectField(next.id);
   }
 
   function onMouseMove(event: React.MouseEvent<HTMLDivElement>) {
-    if (!draggingId) return;
+    if (!dragMode || canvasSize.width === 0 || canvasSize.height === 0) return;
     const wrapper = wrapperRef.current;
-    if (!wrapper || canvasSize.width === 0 || canvasSize.height === 0) return;
+    if (!wrapper) return;
     const rect = wrapper.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / canvasSize.width));
-    const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / canvasSize.height));
-    setFields(fields.map((f) => (f.id === draggingId ? { ...f, x, y } : f)));
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    const deltaX = (pointerX - dragMode.startX) / canvasSize.width;
+    const deltaY = (pointerY - dragMode.startY) / canvasSize.height;
+
+    onFieldsChange(
+      fields.map((f) => {
+        if (f.id !== dragMode.id) return f;
+
+        if (dragMode.kind === "move") {
+          return {
+            ...f,
+            x: clamp(dragMode.startField.x + deltaX, 0, 1 - f.width),
+            y: clamp(dragMode.startField.y + deltaY, 0, 1 - f.height)
+          };
+        }
+
+        return {
+          ...f,
+          width: clamp(dragMode.startField.width + deltaX, 0.03, 1 - f.x),
+          height: clamp(dragMode.startField.height + deltaY, 0.03, 1 - f.y)
+        };
+      })
+    );
   }
 
   const renderedFields = useMemo(
     () =>
-      fields.map((field) => ({
-        ...field,
-        left: field.x * canvasSize.width,
-        top: field.y * canvasSize.height,
-        w: field.width * canvasSize.width,
-        h: field.height * canvasSize.height
+      fields.map((f) => ({
+        ...f,
+        left: f.x * canvasSize.width,
+        top: f.y * canvasSize.height,
+        w: f.width * canvasSize.width,
+        h: f.height * canvasSize.height
       })),
     [canvasSize.height, canvasSize.width, fields]
   );
@@ -94,24 +172,57 @@ export function PdfPrepareCanvas({ fileUrl, fields, setFields }: Props) {
   return (
     <div
       ref={wrapperRef}
-      className="relative inline-block"
+      className="relative inline-block overflow-hidden rounded-xl border border-slate-200 bg-white shadow"
       onDrop={addField}
       onDragOver={(e) => e.preventDefault()}
       onMouseMove={onMouseMove}
-      onMouseUp={() => setDraggingId(null)}
-      onMouseLeave={() => setDraggingId(null)}
+      onMouseDown={() => onSelectField(null)}
     >
-      <canvas ref={canvasRef} className="max-w-full rounded border bg-white shadow-sm" />
-      {renderedFields.map((field) => (
-        <div
-          key={field.id}
-          onMouseDown={() => setDraggingId(field.id)}
-          className="absolute cursor-move rounded border-2 border-indigo-600 bg-indigo-100/70 px-2 py-1 text-xs font-medium text-indigo-700"
-          style={{ left: field.left, top: field.top, width: field.w, height: field.h }}
-        >
-          Signature
-        </div>
-      ))}
+      <canvas ref={canvasRef} className="max-w-full" />
+      {loading ? (
+        <div className="absolute inset-0 grid place-items-center bg-white/70 text-sm text-slate-500">Rendering PDF...</div>
+      ) : null}
+      {renderedFields.map((field) => {
+        const selected = field.id === selectedFieldId;
+        return (
+          <div
+            key={field.id}
+            className={`absolute select-none rounded border text-[11px] font-medium transition ${selected ? "border-cyan-500 bg-cyan-100/80 ring-2 ring-cyan-300" : "border-indigo-500 bg-indigo-100/70"}`}
+            style={{ left: field.left, top: field.top, width: field.w, height: field.h }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onSelectField(field.id);
+              setDragMode({
+                id: field.id,
+                kind: "move",
+                startX: e.clientX - (wrapperRef.current?.getBoundingClientRect().left || 0),
+                startY: e.clientY - (wrapperRef.current?.getBoundingClientRect().top || 0),
+                startField: field
+              });
+            }}
+          >
+            <div className="flex h-full items-center justify-between px-2">
+              <span>{field.label || field.type}</span>
+              {selected ? <span className="h-2.5 w-2.5 rounded-full bg-cyan-600" /> : null}
+            </div>
+            <button
+              type="button"
+              className="absolute -bottom-1 -right-1 h-3 w-3 cursor-se-resize rounded bg-cyan-600"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onSelectField(field.id);
+                setDragMode({
+                  id: field.id,
+                  kind: "resize",
+                  startX: e.clientX - (wrapperRef.current?.getBoundingClientRect().left || 0),
+                  startY: e.clientY - (wrapperRef.current?.getBoundingClientRect().top || 0),
+                  startField: field
+                });
+              }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

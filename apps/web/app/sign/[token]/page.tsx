@@ -8,6 +8,7 @@ type Session = {
   id: string;
   envelopeId: string;
   fullName: string;
+  fields?: Array<{ id: string; type: string }>;
 };
 
 export default function SignPage({ params }: { params: { token: string } }) {
@@ -23,15 +24,20 @@ export default function SignPage({ params }: { params: { token: string } }) {
 
   async function submit() {
     if (!signature) return;
+    const signField = session?.fields?.find((f) => f.type === "SIGNATURE")?.id;
+    if (!signField) {
+      setMessage("No signature field is assigned for this recipient.");
+      return;
+    }
+
     await api(`/sign/${params.token}`, {
       method: "POST",
       body: JSON.stringify({
-        fieldId: "manual-signature",
+        fieldId: signField,
         signatureType: "DRAW",
         imageBase64: signature
       })
     });
-    await api(`/sign/${params.token}/complete`, { method: "POST" });
     setMessage("Document signed successfully.");
   }
 
@@ -51,4 +57,3 @@ export default function SignPage({ params }: { params: { token: string } }) {
     </div>
   );
 }
-

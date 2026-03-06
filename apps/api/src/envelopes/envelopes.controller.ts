@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CreateEnvelopeDto } from "./dto/create-envelope.dto";
@@ -15,14 +15,23 @@ export class EnvelopesController {
     return this.envelopesService.create(userId, dto);
   }
 
+  @Get()
+  list(
+    @CurrentUser("sub") userId: string,
+    @Query("status") status?: string,
+    @Query("scope") scope?: "owner" | "inbox" | "all"
+  ) {
+    return this.envelopesService.list(userId, status, scope);
+  }
+
   @Post(":id/send")
-  send(@Param("id") id: string) {
-    return this.envelopesService.send(id);
+  send(@CurrentUser("sub") userId: string, @Param("id") id: string) {
+    return this.envelopesService.send(userId, id);
   }
 
   @Post("send")
-  sendByBody(@Body("envelopeId") envelopeId: string) {
-    return this.envelopesService.send(envelopeId);
+  sendByBody(@CurrentUser("sub") userId: string, @Body("envelopeId") envelopeId: string) {
+    return this.envelopesService.send(userId, envelopeId);
   }
 
   @Get("dashboard")
@@ -31,18 +40,22 @@ export class EnvelopesController {
   }
 
   @Get(":id/status")
-  status(@Param("id") id: string) {
-    return this.envelopesService.status(id);
+  status(@CurrentUser("sub") userId: string, @Param("id") id: string) {
+    return this.envelopesService.status(userId, id);
   }
 
   @Get(":id")
-  getById(@Param("id") id: string) {
-    return this.envelopesService.getById(id);
+  getById(@CurrentUser("sub") userId: string, @Param("id") id: string) {
+    return this.envelopesService.getById(userId, id);
   }
 
   @Post(":id/recipients")
-  saveRecipients(@Param("id") id: string, @Body("recipients") recipients: CreateEnvelopeDto["recipients"]) {
-    return this.envelopesService.upsertRecipients(id, recipients || []);
+  saveRecipients(
+    @CurrentUser("sub") userId: string,
+    @Param("id") id: string,
+    @Body("recipients") recipients: CreateEnvelopeDto["recipients"]
+  ) {
+    return this.envelopesService.upsertRecipients(userId, id, recipients || []);
   }
 
   @Get(":id/fields")
@@ -51,8 +64,8 @@ export class EnvelopesController {
   }
 
   @Post(":id/fields")
-  saveFields(@Param("id") id: string, @Body() dto: SaveFieldsDto) {
-    return this.envelopesService.saveFields(id, dto);
+  saveFields(@CurrentUser("sub") userId: string, @Param("id") id: string, @Body() dto: SaveFieldsDto) {
+    return this.envelopesService.saveFields(userId, id, dto);
   }
 
 }
