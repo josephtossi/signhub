@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum EnvelopeStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PARTIALLY_SIGNED
+  COMPLETED
+  DECLINED
+  VOIDED
+}
+
+enum RecipientRole {
+  SIGNER
+  CC
+  APPROVER
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  VIEWED
+  SIGNED
+  COMPLETED
+  DECLINED
+}
+
+enum FieldType {
+  SIGNATURE
+  INITIALS
+  DATE
+  TEXT
+  CHECKBOX
+}
+
+enum SignatureType {
+  DRAW
+  TYPE
+  UPLOAD
+}
+
+model User {
+  id               String             @id @default(uuid())
+  email            String             @unique
+  firstName        String?
+  lastName         String?
+  passwordHash     String
+  emailVerifiedAt  DateTime?
+  refreshTokenHash String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  memberships      OrganizationUser[]
+  ownedDocuments   Document[]
+  auditLogs        AuditLog[]
+}
+
+model Organization {
+  id          String             @id @default(uuid())
+  name        String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  users       OrganizationUser[]
+  documents   Document[]
+  envelopes   Envelope[]
+  templates   Template[]
+}
+
+model OrganizationUser {
+  id             String           @id @default(uuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(MEMBER)
+  createdAt      DateTime         @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+}
+
+model Document {
+  id              String            @id @default(uuid())
+  organizationId  String
+  ownerUserId     String
+  title           String
+  status          String            @default("draft")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner           User              @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  versions        DocumentVersion[]
+  envelopes       Envelope[]
+  templates       Template[]
+
+  @@index([organizationId, createdAt])
+}
+
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  documentId String
+  storageKey String
+  sha256     String
+  pageCount  Int?
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+}
+
+model Envelope {
+  id                 String         @id @default(uuid())
+  organizationId     String
+  documentId         String
+  status             EnvelopeStatus @default(DRAFT)
+  subject            String?
+  message            String?
+  signingOrder       Boolean        @default(false)
+  expiresAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document           Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  recipients         Recipient[]
+  fields             Field[]
+  signatures         Signature[]
+  auditLogs          AuditLog[]
+
+  @@index([organizationId, status, createdAt])
+}
+
+model Recipient {
+  id             String          @id @default(uuid())
+  envelopeId     String
+  email          String
+  fullName       String
+  role           RecipientRole   @default(SIGNER)
+  routingOrder   Int             @default(1)
+  status         RecipientStatus @default(PENDING)
+  accessToken    String?
+  lastViewedAt   DateTime?
+  signedAt       DateTime?
+  createdAt      DateTime        @default(now())
+  envelope       Envelope        @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  fields         Field[]
+  signatures     Signature[]
+
+  @@index([envelopeId, routingOrder])
+}
+
+model Field {
+  id          String    @id @default(uuid())
+  envelopeId  String
+  recipientId String?
+  type        FieldType
+  label       String?
+  required    Boolean   @default(true)
+  page        Int
+  x           Float
+  y           Float
+  width       Float
+  height      Float
+  value       String?
+  createdAt   DateTime  @default(now())
+  envelope    Envelope  @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  recipient   Recipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  signatures  Signature[]
+
+  @@index([envelopeId, page])
+}
+
+model Signature {
+  id            String        @id @default(uuid())
+  envelopeId    String
+  recipientId   String
+  fieldId       String
+  signatureType SignatureType
+  storageKey    String
+  signedAt      DateTime      @default(now())
+  ipAddress     String?
+  userAgent     String?
+  envelope      Envelope      @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  recipient     Recipient     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  field         Field         @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  envelopeId    String?
+  actorUserId   String?
+  action        String
+  details       Json?
+  ipAddress     String?
+  userAgent     String?
+  eventHash     String
+  prevEventHash String?
+  createdAt     DateTime @default(now())
+  envelope      Envelope? @relation(fields: [envelopeId], references: [id], onDelete: SetNull)
+  actorUser     User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([envelopeId, createdAt])
+}
+
+model Template {
+  id                String   @id @default(uuid())
+  organizationId    String
+  sourceDocumentId  String
+  name              String
+  schemaJson        Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sourceDocument    Document @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+}
+

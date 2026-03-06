@@ -1,0 +1,99 @@
+### Register
+POST http://localhost:4000/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "owner@example.com",
+  "password": "Str0ngPass123!",
+  "firstName": "Owner",
+  "lastName": "User"
+}
+
+### Login
+POST http://localhost:4000/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "owner@example.com",
+  "password": "Str0ngPass123!"
+}
+
+### Create organization
+POST http://localhost:4000/v1/organizations
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Acme Corp"
+}
+
+### Create document
+POST http://localhost:4000/v1/documents
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "organizationId": "{{organizationId}}",
+  "title": "NDA v1"
+}
+
+### Upload document file
+POST http://localhost:4000/v1/documents/{{documentId}}/upload
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="nda.pdf"
+Content-Type: application/pdf
+
+< ./nda.pdf
+--boundary--
+
+### Create envelope
+POST http://localhost:4000/v1/envelopes
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "organizationId": "{{organizationId}}",
+  "documentId": "{{documentId}}",
+  "subject": "Please sign NDA",
+  "message": "Review and sign",
+  "signingOrder": true,
+  "recipients": [
+    {
+      "email": "signer1@example.com",
+      "fullName": "Signer One",
+      "routingOrder": 1
+    }
+  ]
+}
+
+### Send envelope
+POST http://localhost:4000/v1/envelopes/{{envelopeId}}/send
+Authorization: Bearer {{accessToken}}
+
+### Fetch envelope status
+GET http://localhost:4000/v1/envelopes/{{envelopeId}}/status
+Authorization: Bearer {{accessToken}}
+
+### Signing session
+GET http://localhost:4000/v1/sign/{{signToken}}/session
+
+### Submit signature
+POST http://localhost:4000/v1/sign/{{signToken}}/submit
+Content-Type: application/json
+
+{
+  "fieldId": "{{fieldId}}",
+  "signatureType": "DRAW",
+  "imageBase64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+}
+
+### Complete signing
+POST http://localhost:4000/v1/sign/{{signToken}}/complete
+
+### Audit log
+GET http://localhost:4000/v1/audit/envelope/{{envelopeId}}
+Authorization: Bearer {{accessToken}}
+
