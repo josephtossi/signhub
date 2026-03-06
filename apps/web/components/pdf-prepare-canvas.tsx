@@ -16,12 +16,11 @@ export type SignatureField = {
 
 type Props = {
   fileUrl: string;
-  token: string;
   fields: SignatureField[];
   setFields: (fields: SignatureField[]) => void;
 };
 
-export function PdfPrepareCanvas({ fileUrl, token, fields, setFields }: Props) {
+export function PdfPrepareCanvas({ fileUrl, fields, setFields }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -31,7 +30,7 @@ export function PdfPrepareCanvas({ fileUrl, token, fields, setFields }: Props) {
     async function render() {
       const loadingTask = pdfjsLib.getDocument({
         url: fileUrl,
-        httpHeaders: { Authorization: `Bearer ${token}` }
+        withCredentials: true
       });
       const pdf = await loadingTask.promise;
       const page = await pdf.getPage(1);
@@ -46,7 +45,7 @@ export function PdfPrepareCanvas({ fileUrl, token, fields, setFields }: Props) {
       await page.render({ canvasContext: context, viewport }).promise;
     }
     render().catch(() => null);
-  }, [fileUrl, token]);
+  }, [fileUrl]);
 
   function addField(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -116,4 +115,3 @@ export function PdfPrepareCanvas({ fileUrl, token, fields, setFields }: Props) {
     </div>
   );
 }
-

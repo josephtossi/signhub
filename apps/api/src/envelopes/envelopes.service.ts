@@ -12,10 +12,14 @@ export class EnvelopesService {
     private readonly notifications: NotificationsService
   ) {}
 
-  async create(dto: CreateEnvelopeDto) {
+  async create(ownerUserId: string, dto: CreateEnvelopeDto) {
+    const document = await this.prisma.document.findUnique({ where: { id: dto.documentId } });
+    if (!document) throw new NotFoundException("Document not found");
+    if (document.ownerUserId !== ownerUserId) throw new NotFoundException("Document not accessible");
+
     return this.prisma.envelope.create({
       data: {
-        organizationId: dto.organizationId,
+        organizationId: document.organizationId,
         documentId: dto.documentId,
         subject: dto.subject,
         message: dto.message,
@@ -52,6 +56,27 @@ export class EnvelopesService {
       });
     }
     return envelope;
+  }
+
+  async upsertRecipients(envelopeId: string, recipients: CreateEnvelopeDto["recipients"]) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.recipient.deleteMany({ where: { envelopeId } });
+      if (recipients.length > 0) {
+        await tx.recipient.createMany({
+          data: recipients.map((r, idx) => ({
+            envelopeId,
+            email: r.email,
+            fullName: r.fullName,
+            role: r.role === "CC" ? "CC" : "SIGNER",
+            routingOrder: r.routingOrder || idx + 1,
+            status: "PENDING",
+            accessToken: randomBytes(24).toString("hex")
+          }))
+        });
+      }
+    });
+
+    return this.prisma.recipient.findMany({ where: { envelopeId }, orderBy: { routingOrder: "asc" } });
   }
 
   async status(envelopeId: string) {
@@ -92,5 +117,61 @@ export class EnvelopesService {
       where: { envelopeId },
       orderBy: { createdAt: "asc" }
     });
+  }
+
+  getById(envelopeId: string) {
+    return this.prisma.envelope.findUnique({
+      where: { id: envelopeId },
+      include: {
+        document: true,
+        recipients: true,
+        fields: true,
+        signatures: true
+      }
+    });
+  }
+
+  async dashboard(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException("User not found");
+
+    const [needsMySignature, waitingForOthers, completed, drafts] = await Promise.all([
+      this.prisma.recipient.count({
+        where: {
+          email: user.email,
+          status: { in: ["PENDING", "SENT", "VIEWED"] }
+        }
+      }),
+      this.prisma.envelope.count({
+        where: {
+          document: { ownerUserId: userId },
+          status: { in: ["SENT", "VIEWED", "PARTIALLY_SIGNED"] }
+        }
+      }),
+      this.prisma.envelope.count({
+        where: {
+          document: { ownerUserId: userId },
+          status: "COMPLETED"
+        }
+      }),
+      this.prisma.envelope.count({
+        where: {
+          document: { ownerUserId: userId },
+          status: "DRAFT"
+        }
+      })
+    ]);
+
+    const recent = await this.prisma.envelope.findMany({
+      where: { document: { ownerUserId: userId } },
+      include: { recipients: true, document: true },
+      orderBy: { createdAt: "desc" },
+      take: 10
+    });
+
+    return {
+      counts: { needsMySignature, waitingForOthers, completed, drafts },
+      recent
+    };
   }
 }

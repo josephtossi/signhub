@@ -12,14 +12,32 @@ export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Post()
-  create(@CurrentUser("sub") userId: string, @Body() dto: CreateDocumentDto) {
-    return this.documentsService.create(userId, dto.organizationId, dto.title);
+  @UseInterceptors(FileInterceptor("file"))
+  create(
+    @CurrentUser("sub") userId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: CreateDocumentDto
+  ) {
+    if (file) {
+      return this.documentsService.uploadAndCreate(userId, dto?.title || file.originalname || "Untitled", file);
+    }
+    return this.documentsService.create(userId, dto.title);
   }
 
   @Post(":id/upload")
   @UseInterceptors(FileInterceptor("file"))
   upload(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
     return this.documentsService.uploadVersion(id, file);
+  }
+
+  @Post("upload")
+  @UseInterceptors(FileInterceptor("file"))
+  uploadAndCreate(
+    @CurrentUser("sub") userId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body("title") title?: string
+  ) {
+    return this.documentsService.uploadAndCreate(userId, title || file?.originalname || "Untitled", file);
   }
 
   @Get()

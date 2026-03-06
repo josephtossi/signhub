@@ -1,27 +1,48 @@
-import { Card } from "@signhub/ui";
+"use client";
 
-const timeline = [
-  { status: "Sent", at: "2026-03-06 09:10 UTC" },
-  { status: "Viewed by signer", at: "2026-03-06 09:12 UTC" },
-  { status: "Signed by signer", at: "2026-03-06 09:20 UTC" },
-  { status: "Completed", at: "2026-03-06 09:21 UTC" }
-];
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+
+type Envelope = {
+  id: string;
+  status: string;
+  createdAt: string;
+  completedAt?: string | null;
+  document: { title: string };
+  recipients: { id: string; email: string; fullName: string; status: string; signedAt?: string | null }[];
+  signatures: { id: string; signedAt: string; recipientId: string }[];
+};
 
 export default function TrackingPage({ params }: { params: { envelopeId: string } }) {
+  const [envelope, setEnvelope] = useState<Envelope | null>(null);
+
+  useEffect(() => {
+    api<Envelope>(`/envelopes/${params.envelopeId}`).then(setEnvelope).catch(() => null);
+  }, [params.envelopeId]);
+
+  if (!envelope) return <p className="text-sm text-slate-500">Loading envelope...</p>;
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Tracking: {params.envelopeId}</h1>
-      <Card>
-        <h2 className="mb-3 text-lg font-medium">Activity timeline</h2>
-        <ul className="space-y-2">
-          {timeline.map((item) => (
-            <li key={`${item.status}-${item.at}`} className="flex items-center justify-between rounded border p-3 text-sm">
-              <span>{item.status}</span>
-              <span className="text-slate-500">{item.at}</span>
-            </li>
+      <section className="rounded-xl bg-gradient-to-r from-slate-900 to-indigo-900 p-6 text-white">
+        <h1 className="text-2xl font-semibold">{envelope.document?.title || "Envelope"}</h1>
+        <p className="mt-1 text-slate-200">Status: {envelope.status}</p>
+      </section>
+
+      <section className="glass rounded-xl border border-white/70 p-5">
+        <h2 className="mb-3 text-lg font-semibold">Recipients</h2>
+        <div className="space-y-2">
+          {envelope.recipients.map((r) => (
+            <div key={r.id} className="flex items-center justify-between rounded-md border border-slate-200 bg-white p-3">
+              <div>
+                <p className="font-medium">{r.fullName}</p>
+                <p className="text-xs text-slate-500">{r.email}</p>
+              </div>
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{r.status}</span>
+            </div>
           ))}
-        </ul>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 }

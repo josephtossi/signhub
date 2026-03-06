@@ -1,35 +1,113 @@
+"use client";
+
 import Link from "next/link";
-import { Card, Button } from "@signhub/ui";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "@/lib/api";
+
+type DashboardData = {
+  counts: {
+    needsMySignature: number;
+    waitingForOthers: number;
+    completed: number;
+    drafts: number;
+  };
+  recent: {
+    id: string;
+    status: string;
+    createdAt: string;
+    document: { title: string };
+    recipients: { email: string; status: string }[];
+  }[];
+};
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      try {
+        await api("/auth/me");
+        const summary = await api<DashboardData>("/dashboard");
+        setData(summary);
+      } catch {
+        router.push("/login");
+      }
+    }
+    load();
+  }, [router]);
+
+  async function logout() {
+    await api("/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
+
+  const total = useMemo(() => {
+    if (!data) return 0;
+    const c = data.counts;
+    return c.needsMySignature + c.waitingForOthers + c.completed + c.drafts;
+  }, [data]);
+
+  if (!data) return <p className="text-sm text-slate-500">Loading dashboard...</p>;
+
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl bg-brand-900 p-8 text-white">
-        <h1 className="text-3xl font-semibold">Welcome Back</h1>
-        <p className="mt-2 text-indigo-100">Send, sign, and track agreements in one place.</p>
+      <section className="rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-900 to-cyan-800 p-7 text-white">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold">Agreement Command Center</h1>
+            <p className="mt-2 text-slate-200">Live envelope intelligence and execution status.</p>
+          </div>
+          <button className="rounded-lg border border-white/30 px-4 py-2 text-sm" onClick={logout}>
+            Logout
+          </button>
+        </div>
       </section>
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <p className="text-sm text-slate-500">Pending Signatures</p>
-          <p className="mt-2 text-3xl font-semibold">12</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-slate-500">Completed This Week</p>
-          <p className="mt-2 text-3xl font-semibold">34</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-slate-500">Draft Envelopes</p>
-          <p className="mt-2 text-3xl font-semibold">8</p>
-        </Card>
+
+      <section className="grid gap-4 md:grid-cols-4">
+        {[
+          ["Needs My Signature", data.counts.needsMySignature, "from-amber-400 to-orange-500"],
+          ["Waiting For Others", data.counts.waitingForOthers, "from-blue-500 to-indigo-600"],
+          ["Completed", data.counts.completed, "from-emerald-400 to-green-600"],
+          ["Drafts", data.counts.drafts, "from-slate-400 to-slate-600"]
+        ].map(([label, value, gradient]) => (
+          <div key={String(label)} className="glass rounded-xl border border-white/70 p-5 shadow-sm">
+            <div className={`mb-3 h-1.5 rounded-full bg-gradient-to-r ${gradient}`} />
+            <p className="text-sm text-slate-500">{label}</p>
+            <p className="mt-1 text-3xl font-semibold">{value}</p>
+          </div>
+        ))}
       </section>
-      <section className="flex gap-3">
-        <Link href="/upload">
-          <Button>Upload Document</Button>
-        </Link>
-        <Link href="/tracking/demo">
-          <Button variant="secondary">Open Tracking</Button>
-        </Link>
+
+      <section className="glass rounded-xl border border-white/70 p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Recent Envelopes</h2>
+          <Link href="/upload" className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white">
+            New Envelope
+          </Link>
+        </div>
+        <div className="space-y-2">
+          {data.recent.map((item) => (
+            <Link
+              href={`/tracking/${item.id}`}
+              key={item.id}
+              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 p-3 transition hover:bg-white"
+            >
+              <div>
+                <p className="font-medium">{item.document?.title || "Untitled"}</p>
+                <p className="text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
+              </div>
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{item.status}</span>
+            </Link>
+          ))}
+          {data.recent.length === 0 ? <p className="text-sm text-slate-500">No envelopes yet.</p> : null}
+        </div>
       </section>
+
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <p className="text-xs text-slate-500">Total envelopes in view: {total}</p>
     </div>
   );
 }

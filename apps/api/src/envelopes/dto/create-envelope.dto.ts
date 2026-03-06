@@ -20,9 +20,6 @@ class RecipientDto {
 
 export class CreateEnvelopeDto {
   @IsString()
-  organizationId!: string;
-
-  @IsString()
   documentId!: string;
 
   @IsOptional()

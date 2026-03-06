@@ -19,6 +19,12 @@ export class SigningService {
       include: { envelope: true }
     });
     if (!recipient) throw new NotFoundException("Invalid token");
+    if (recipient.status === "PENDING" || recipient.status === "SENT") {
+      await this.prisma.recipient.update({
+        where: { id: recipient.id },
+        data: { status: "VIEWED", lastViewedAt: new Date() }
+      });
+    }
     return recipient;
   }
 
@@ -45,6 +51,22 @@ export class SigningService {
     await this.prisma.recipient.update({
       where: { id: recipient.id },
       data: { status: "SIGNED", signedAt: new Date() }
+    });
+
+    const unsigned = await this.prisma.recipient.count({
+      where: {
+        envelopeId: recipient.envelopeId,
+        role: "SIGNER",
+        status: { not: "SIGNED" }
+      }
+    });
+
+    await this.prisma.envelope.update({
+      where: { id: recipient.envelopeId },
+      data:
+        unsigned === 0
+          ? { status: "COMPLETED", completedAt: new Date() }
+          : { status: "PARTIALLY_SIGNED" }
     });
 
     await this.audit.append({

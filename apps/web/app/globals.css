@@ -2,7 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-50 text-slate-900;
+:root {
+  --bg-1: #f8fafc;
+  --bg-2: #e2e8f0;
+  --brand-1: #0f172a;
+  --brand-2: #0ea5e9;
+  --accent: #22c55e;
 }
 
+body {
+  @apply text-slate-900;
+  background: radial-gradient(circle at 10% 20%, #ffffff, var(--bg-1) 35%, var(--bg-2));
+}
+
+.glass {
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.fade-in {
+  animation: fadeIn 420ms ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

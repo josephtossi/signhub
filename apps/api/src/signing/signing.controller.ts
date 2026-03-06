@@ -27,5 +27,12 @@ export class SigningController {
       userAgent: req.headers["user-agent"]
     });
   }
-}
 
+  @Post(":token")
+  sign(@Param("token") token: string, @Body() dto: SubmitSignatureDto, @Req() req: Request) {
+    return this.signingService.submit(token, dto, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
+  }
+}

@@ -1,5 +1,8 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, Res, UseGuards } from "@nestjs/common";
+import { Response } from "express";
 import { AuthService } from "./auth.service";
+import { CurrentUser } from "./current-user.decorator";
+import { JwtAuthGuard } from "./jwt-auth.guard";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
@@ -8,19 +11,59 @@ import { RegisterDto } from "./dto/register.dto";
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post("register")
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  @Post("signup")
+  async signup(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    const tokens = await this.authService.register(dto);
+    this.attachCookies(res, tokens.accessToken, tokens.refreshToken);
+    return { user: await this.authService.me(this.getSub(tokens.accessToken)) };
   }
 
   @Post("login")
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const tokens = await this.authService.login(dto);
+    this.attachCookies(res, tokens.accessToken, tokens.refreshToken);
+    return { user: await this.authService.me(this.getSub(tokens.accessToken)) };
   }
 
   @Post("refresh")
-  refresh(@Body() dto: RefreshDto) {
-    return this.authService.refresh(dto.refreshToken);
+  async refresh(@Body() dto: RefreshDto, @Res({ passthrough: true }) res: Response) {
+    const tokens = await this.authService.refresh(dto.refreshToken);
+    this.attachCookies(res, tokens.accessToken, tokens.refreshToken);
+    return { ok: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("me")
+  me(@CurrentUser("sub") userId: string) {
+    return this.authService.me(userId);
+  }
+
+  @Post("logout")
+  logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie("access_token");
+    res.clearCookie("refresh_token");
+    return { ok: true };
+  }
+
+  private attachCookies(res: Response, accessToken: string, refreshToken: string) {
+    const secure = process.env.NODE_ENV === "production";
+    res.cookie("access_token", accessToken, {
+      httpOnly: true,
+      secure,
+      sameSite: "lax",
+      maxAge: 1000 * 60 * 15
+    });
+    res.cookie("refresh_token", refreshToken, {
+      httpOnly: true,
+      secure,
+      sameSite: "lax",
+      maxAge: 1000 * 60 * 60 * 24 * 7
+    });
+  }
+
+  private getSub(jwt: string): string {
+    const [, payload] = jwt.split(".");
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return parsed.sub;
   }
 }
-

@@ -13,22 +13,22 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en">
       <body>
         <Providers>
-          <header className="border-b bg-white">
-            <div className="mx-auto flex max-w-7xl items-center gap-6 px-6 py-4">
-              <Link href="/dashboard" className="text-xl font-semibold text-brand-900">
-                SignHub
+          <header className="sticky top-0 z-20 border-b border-slate-200/60 glass">
+            <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+              <Link href="/dashboard" className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-indigo-600" />
+                <span className="text-xl font-semibold tracking-tight text-slate-900">SignHub</span>
               </Link>
-              <nav className="flex gap-4 text-sm text-slate-600">
+              <nav className="flex gap-6 text-sm font-medium text-slate-600">
                 <Link href="/dashboard">Dashboard</Link>
                 <Link href="/upload">Upload</Link>
-                <Link href="/tracking/demo">Tracking</Link>
+                <Link href="/tracking">Tracking</Link>
               </nav>
             </div>
           </header>
-          <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+          <main className="mx-auto max-w-7xl px-6 py-8 fade-in">{children}</main>
         </Providers>
       </body>
     </html>
   );
 }
-

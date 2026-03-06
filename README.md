@@ -166,3 +166,26 @@ corepack pnpm --filter @signhub/web exec next dev -p 3001
 docker compose up -d postgres redis minio createbucket
 ```
 - If Prisma fails, verify `DATABASE_URL` in `.env` and that Postgres container is running.
+
+## 8) No-Docker demo mode
+
+If you only want to try the flow quickly without Postgres/Redis/MinIO:
+
+1. Start web:
+```bash
+corepack pnpm --filter @signhub/web exec next dev -p 3001
+```
+
+2. Start mock API:
+```bash
+cd apps/api
+corepack pnpm --filter @signhub/api exec node mock-server.cjs
+```
+
+Demo URLs:
+- Web: `http://localhost:3001`
+- Mock API: `http://localhost:4000`
+
+Notes:
+- This mock API supports upload + prepare + save fields endpoints used by the web app.
+- Data is in-memory (resets when mock server restarts).

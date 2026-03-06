@@ -20,30 +20,41 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    if (this.config.get("DISABLE_QUEUES", "false") === "true") {
+    const disableQueues = (this.config.get("DISABLE_QUEUES") || "").toLowerCase();
+    const shouldDisable =
+      disableQueues === "true" ||
+      disableQueues === "1" ||
+      disableQueues === "yes" ||
+      (!disableQueues && this.config.get("NODE_ENV", "development") !== "production");
+
+    if (shouldDisable) {
       this.disabled = true;
       return;
     }
 
-    const redisUrl = this.config.get("REDIS_URL", "redis://localhost:6379");
-    const parsed = new URL(redisUrl);
-    this.connection = {
-      host: parsed.hostname,
-      port: Number(parsed.port || 6379)
-    };
-    this.emailQueue = new Queue<EmailPayload>("emails", { connection: this.connection });
-    this.webhookQueue = new Queue<WebhookPayload>("webhooks", { connection: this.connection });
+    try {
+      const redisUrl = this.config.get("REDIS_URL", "redis://localhost:6379");
+      const parsed = new URL(redisUrl);
+      this.connection = {
+        host: parsed.hostname,
+        port: Number(parsed.port || 6379)
+      };
+      this.emailQueue = new Queue<EmailPayload>("emails", { connection: this.connection });
+      this.webhookQueue = new Queue<WebhookPayload>("webhooks", { connection: this.connection });
 
-    this.emailWorker = new Worker<EmailPayload>(
-      "emails",
-      async (job: Job<EmailPayload>) => this.emailService.send(job.data),
-      { connection: this.connection }
-    );
-    this.webhookWorker = new Worker<WebhookPayload>(
-      "webhooks",
-      async (job: Job<WebhookPayload>) => this.webhookService.deliver(job.data),
-      { connection: this.connection }
-    );
+      this.emailWorker = new Worker<EmailPayload>(
+        "emails",
+        async (job: Job<EmailPayload>) => this.emailService.send(job.data),
+        { connection: this.connection }
+      );
+      this.webhookWorker = new Worker<WebhookPayload>(
+        "webhooks",
+        async (job: Job<WebhookPayload>) => this.webhookService.deliver(job.data),
+        { connection: this.connection }
+      );
+    } catch {
+      this.disabled = true;
+    }
   }
 
   async onModuleDestroy() {

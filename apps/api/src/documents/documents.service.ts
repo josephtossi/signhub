@@ -10,7 +10,17 @@ export class DocumentsService {
     private readonly s3: S3Service
   ) {}
 
-  async create(ownerUserId: string, organizationId: string, title: string) {
+  private async getDefaultOrganizationId(userId: string) {
+    const membership = await this.prisma.organizationUser.findFirst({
+      where: { userId },
+      orderBy: { createdAt: "asc" }
+    });
+    if (!membership) throw new NotFoundException("No organization found for user");
+    return membership.organizationId;
+  }
+
+  async create(ownerUserId: string, title: string) {
+    const organizationId = await this.getDefaultOrganizationId(ownerUserId);
     return this.prisma.document.create({
       data: {
         organizationId,
@@ -69,5 +79,11 @@ export class DocumentsService {
       contentType: object.contentType,
       version
     };
+  }
+
+  async uploadAndCreate(ownerUserId: string, title: string, file: Express.Multer.File) {
+    const doc = await this.create(ownerUserId, title || file.originalname);
+    const version = await this.uploadVersion(doc.id, file);
+    return { document: doc, version };
   }
 }

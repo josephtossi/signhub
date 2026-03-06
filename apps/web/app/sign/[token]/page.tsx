@@ -1,24 +1,53 @@
 "use client";
 
-import { useState } from "react";
-import { Card, Button } from "@signhub/ui";
+import { useEffect, useState } from "react";
 import { SignaturePad } from "@/components/signature-pad";
+import { api } from "@/lib/api";
+
+type Session = {
+  id: string;
+  envelopeId: string;
+  fullName: string;
+};
 
 export default function SignPage({ params }: { params: { token: string } }) {
+  const [session, setSession] = useState<Session | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    api<Session>(`/sign/${params.token}/session`)
+      .then(setSession)
+      .catch((e) => setMessage(e instanceof Error ? e.message : "Failed to load signing session"));
+  }, [params.token]);
+
+  async function submit() {
+    if (!signature) return;
+    await api(`/sign/${params.token}`, {
+      method: "POST",
+      body: JSON.stringify({
+        fieldId: "manual-signature",
+        signatureType: "DRAW",
+        imageBase64: signature
+      })
+    });
+    await api(`/sign/${params.token}/complete`, { method: "POST" });
+    setMessage("Document signed successfully.");
+  }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <Card>
-        <p className="text-sm text-slate-500">Signing token</p>
-        <p className="font-mono text-sm">{params.token}</p>
-      </Card>
-      <Card className="space-y-4">
-        <h1 className="text-2xl font-semibold">Sign document</h1>
+    <div className="mx-auto max-w-3xl space-y-5">
+      <section className="rounded-xl bg-gradient-to-r from-indigo-900 to-slate-900 p-6 text-white">
+        <h1 className="text-2xl font-semibold">Secure Signing Session</h1>
+        <p className="text-slate-200">{session ? `Signer: ${session.fullName}` : "Loading signer details..."}</p>
+      </section>
+      <section className="glass rounded-xl border border-white/70 p-6">
         <SignaturePad onSave={setSignature} />
-        {signature ? <p className="text-sm text-green-700">Signature captured and ready.</p> : null}
-        <Button disabled={!signature}>Complete signing</Button>
-      </Card>
+        <button className="mt-4 rounded-md bg-emerald-600 px-4 py-2 font-medium text-white" onClick={submit} disabled={!signature}>
+          Sign Document
+        </button>
+        {message ? <p className="mt-3 text-sm text-slate-700">{message}</p> : null}
+      </section>
     </div>
   );
 }

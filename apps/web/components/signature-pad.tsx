@@ -5,7 +5,7 @@ import SignatureCanvas from "react-signature-canvas";
 import { Button } from "@signhub/ui";
 
 export function SignaturePad({ onSave }: { onSave: (dataUrl: string) => void }) {
-  const sigRef = useRef<SignatureCanvas>(null);
+  const sigRef = useRef<any>(null);
 
   return (
     <div className="space-y-3">
@@ -31,4 +31,3 @@ export function SignaturePad({ onSave }: { onSave: (dataUrl: string) => void }) 
     </div>
   );
 }
-

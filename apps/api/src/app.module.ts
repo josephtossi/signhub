@@ -9,8 +9,11 @@ import { EnvelopesModule } from "./envelopes/envelopes.module";
 import { SigningModule } from "./signing/signing.module";
 import { AuditModule } from "./audit/audit.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { DashboardController } from "./dashboard.controller";
+import { AiModule } from "./ai/ai.module";
 
 @Module({
+  controllers: [DashboardController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
@@ -21,8 +24,8 @@ import { NotificationsModule } from "./notifications/notifications.module";
     EnvelopesModule,
     SigningModule,
     AuditModule,
-    NotificationsModule
+    NotificationsModule,
+    AiModule
   ]
 })
 export class AppModule {}
-
