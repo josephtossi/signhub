@@ -48,7 +48,7 @@ export default function UploadPage() {
         })
       });
 
-      router.push(`/prepare/${envelope.id}`);
+      router.push(`/envelopes/${envelope.id}/prepare`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -87,4 +87,3 @@ export default function UploadPage() {
     </div>
   );
 }
-

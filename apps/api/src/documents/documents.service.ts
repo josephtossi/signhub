@@ -71,6 +71,37 @@ export class DocumentsService {
     return version;
   }
 
+  async getById(userId: string, documentId: string) {
+    const document = await this.prisma.document.findFirst({
+      where: {
+        id: documentId,
+        OR: [
+          { ownerUserId: userId },
+          {
+            organization: {
+              users: {
+                some: {
+                  userId
+                }
+              }
+            }
+          }
+        ]
+      },
+      include: {
+        versions: {
+          orderBy: { createdAt: "desc" }
+        },
+        envelopes: {
+          orderBy: { createdAt: "desc" },
+          take: 10
+        }
+      }
+    });
+    if (!document) throw new NotFoundException("Document not found");
+    return document;
+  }
+
   async getLatestFile(documentId: string) {
     const version = await this.getLatestVersion(documentId);
     const object = await this.s3.getObject(version.storageKey);

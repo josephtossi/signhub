@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SignaturePad } from "@/components/signature-pad";
+import { PdfSignCanvas } from "@/components/pdf-sign-canvas";
 import { api } from "@/lib/api";
 
 type Session = {
@@ -9,10 +10,22 @@ type Session = {
   envelopeId: string;
   fullName: string;
   document?: { id: string; title: string };
-  fields?: Array<{ id: string; type: string; label?: string | null; required: boolean; value?: string | null }>;
+  fields?: Array<{
+    id: string;
+    type: string;
+    label?: string | null;
+    required: boolean;
+    page: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    value?: string | null;
+  }>;
 };
 
 export default function SignPage({ params }: { params: { token: string } }) {
+  const token = params?.token || "";
   const [session, setSession] = useState<Session | null>(null);
   const [signatureMode, setSignatureMode] = useState<"DRAW" | "TYPE" | "UPLOAD">("DRAW");
   const [typedSignature, setTypedSignature] = useState("");
@@ -23,10 +36,16 @@ export default function SignPage({ params }: { params: { token: string } }) {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [pdfError, setPdfError] = useState("");
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
 
   useEffect(() => {
-    api<Session>(`/sign/${params.token}/session`)
+    if (!token || token.length < 8) {
+      setError("Invalid signing link.");
+      return;
+    }
+    console.info("[sign] token received", token.slice(0, 8));
+    api<Session>(`/sign/${token}/session`)
       .then((data) => {
         setSession(data);
         const values: Record<string, string> = {};
@@ -42,7 +61,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
         setCheckboxValues(checks);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load signing session"));
-  }, [params.token]);
+  }, [token]);
 
   function buildTypedSignatureImage(text: string) {
     const canvas = document.createElement("canvas");
@@ -87,7 +106,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
             image = buildTypedSignatureImage(typedSignature.trim());
           }
           if (!image) throw new Error("A signature image is required.");
-          await api(`/sign/${params.token}/submit`, {
+          await api(`/sign/${token}/submit`, {
             method: "POST",
             body: JSON.stringify({
               fieldId: field.id,
@@ -104,7 +123,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
           if (field.required && !checked) {
             throw new Error(`Required checkbox "${field.label || field.type}" is not checked.`);
           }
-          await api(`/sign/${params.token}/submit`, {
+          await api(`/sign/${token}/submit`, {
             method: "POST",
             body: JSON.stringify({
               fieldId: field.id,
@@ -122,7 +141,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
         if (field.required && !String(value).trim()) {
           throw new Error(`Required field "${field.label || field.type}" is empty.`);
         }
-        await api(`/sign/${params.token}/submit`, {
+        await api(`/sign/${token}/submit`, {
           method: "POST",
           body: JSON.stringify({
             fieldId: field.id,
@@ -132,7 +151,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
         });
       }
 
-      await api(`/sign/${params.token}/complete`, { method: "POST" });
+      await api(`/sign/${token}/complete`, { method: "POST" });
       setMessage("Document signed successfully. You can close this window.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to submit signature");
@@ -141,20 +160,48 @@ export default function SignPage({ params }: { params: { token: string } }) {
     }
   }
 
+  const requiredFields = (session?.fields || []).filter((f) => f.required);
+  const completedRequiredCount = requiredFields.filter((field) => {
+    if (field.type === "SIGNATURE" || field.type === "INITIAL") {
+      return Boolean(signature) || (signatureMode === "TYPE" && typedSignature.trim().length > 0);
+    }
+    if (field.type === "CHECKBOX") return Boolean(checkboxValues[field.id]);
+    return Boolean(fieldValues[field.id] && fieldValues[field.id].trim().length > 0);
+  }).length;
+  const completionPercent = requiredFields.length
+    ? Math.round((completedRequiredCount / requiredFields.length) * 100)
+    : 100;
+
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <section className="rounded-xl bg-gradient-to-r from-indigo-900 to-slate-900 p-6 text-white">
         <h1 className="text-2xl font-semibold">Secure Signing Session</h1>
         <p className="text-slate-200">{session ? `Signer: ${session.fullName}` : "Loading signer details..."}</p>
+        <div className="mt-3">
+          <div className="mb-1 flex items-center justify-between text-xs text-slate-200">
+            <span>Required fields completed</span>
+            <span>{completionPercent}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-white/20">
+            <div className="h-2 rounded-full bg-emerald-400 transition-all" style={{ width: `${completionPercent}%` }} />
+          </div>
+        </div>
       </section>
       <div className="grid gap-5 lg:grid-cols-[1.2fr,1fr]">
         <section className="rounded-xl border border-slate-200 bg-white p-3">
           <div className="mb-2 text-sm font-medium text-slate-700">{session?.document?.title || "Document Preview"}</div>
-          <iframe
-            src={`${apiBase}/sign/${params.token}/document`}
-            className="h-[70vh] w-full rounded-lg border border-slate-200"
-            title="Document preview"
-          />
+          {token ? (
+            <PdfSignCanvas
+              fileUrl={`${apiBase}/sign/${token}/document`}
+              fields={session?.fields || []}
+              completedFieldIds={[
+                ...Object.keys(fieldValues).filter((id) => fieldValues[id]),
+                ...Object.keys(checkboxValues).filter((id) => checkboxValues[id])
+              ]}
+              onError={setPdfError}
+            />
+          ) : null}
+          {pdfError ? <p className="mt-2 text-xs text-red-600">PDF preview error: {pdfError}</p> : null}
         </section>
 
         <section className="glass rounded-xl border border-white/70 p-6">

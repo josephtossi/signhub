@@ -4,6 +4,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { PrismaService } from "../common/prisma.service";
 import { S3Service } from "../documents/s3.service";
 import { AuditService } from "../audit/audit.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { SubmitSignatureDto } from "./dto/submit-signature.dto";
 
 @Injectable()
@@ -11,7 +12,8 @@ export class SigningService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly notifications: NotificationsService
   ) {}
 
   async getSession(token: string) {
@@ -53,6 +55,10 @@ export class SigningService {
         label: f.label,
         required: f.required,
         page: f.page,
+        x: f.x,
+        y: f.y,
+        width: f.width,
+        height: f.height,
         value: f.value
       }))
     };
@@ -163,9 +169,8 @@ export class SigningService {
     meta: { ipAddress?: string; userAgent?: string },
     requireAllFields = false
   ) {
-    const [recipient, allRecipients, fields, signatures] = await Promise.all([
+    const [recipient, fields, signatures] = await Promise.all([
       this.prisma.recipient.findUnique({ where: { id: recipientId } }),
-      this.prisma.recipient.findMany({ where: { envelopeId } }),
       this.prisma.field.findMany({ where: { envelopeId } }),
       this.prisma.signature.findMany({ where: { envelopeId } })
     ]);
@@ -184,12 +189,15 @@ export class SigningService {
     };
 
     const allRequiredDone = required.every((f) => isFieldCompleted(f.id));
+    const wasSignedBefore = recipient.status === "SIGNED";
+    let justSigned = false;
     if (allRequiredDone || (!requireAllFields && assigned.length === 0)) {
       if (recipient.status !== "SIGNED") {
         await this.prisma.recipient.update({
           where: { id: recipientId },
           data: { status: "SIGNED", signedAt: new Date() }
         });
+        justSigned = true;
       }
     } else if (requireAllFields) {
       throw new NotFoundException("Required fields are not completed yet");
@@ -221,6 +229,31 @@ export class SigningService {
         where: { id: envelopeId },
         data: { status: envelopeStatus }
       });
+    }
+
+    const envelope = await this.prisma.envelope.findUnique({ where: { id: envelopeId } });
+    if (envelope && envelope.signingOrder && justSigned && !wasSignedBefore) {
+      const current = refreshedRecipients.find((r) => r.id === recipientId);
+      const pendingNextOrders = refreshedRecipients
+        .filter((r) => r.role === "SIGNER" && r.status !== "SIGNED" && r.routingOrder > (current?.routingOrder || 0))
+        .map((r) => r.routingOrder);
+      const nextOrder = pendingNextOrders.length ? Math.min(...pendingNextOrders) : null;
+      if (nextOrder !== null) {
+        const nextRecipients = refreshedRecipients.filter(
+          (r) => r.role === "SIGNER" && r.status !== "SIGNED" && r.routingOrder === nextOrder
+        );
+        for (const next of nextRecipients) {
+          await this.notifications.queueEmail({
+            to: next.email,
+            subject: envelope.subject || "Signature request",
+            template: "sign-request",
+            data: {
+              recipientName: next.fullName,
+              signingLink: `${process.env.SIGN_URL_BASE || "http://localhost:3001/sign"}/${next.accessToken}`
+            }
+          });
+        }
+      }
     }
 
     await this.audit.append({
@@ -275,7 +308,7 @@ export class SigningService {
             embeddedImage = await pdfDoc.embedJpg(imageFile.body);
           }
           page.drawImage(embeddedImage, { x, y, width: w, height: h });
-          const stamp = `${sig.recipient.fullName} • ${new Date(sig.signedAt).toISOString()}`;
+          const stamp = `${sig.recipient.fullName} | ${new Date(sig.signedAt).toISOString()}`;
           page.drawText(stamp, {
             x,
             y: Math.max(0, y - 10),
@@ -319,6 +352,28 @@ export class SigningService {
           color: rgb(0.08, 0.08, 0.12)
         });
       }
+    }
+
+    const certificatePage = pdfDoc.addPage([595, 842]);
+    certificatePage.drawText("SignHub Completion Certificate", {
+      x: 50,
+      y: 790,
+      size: 20,
+      font,
+      color: rgb(0.08, 0.12, 0.2)
+    });
+    certificatePage.drawText(`Envelope ID: ${envelope.id}`, { x: 50, y: 755, size: 11, font });
+    certificatePage.drawText(`Document: ${envelope.document.title}`, { x: 50, y: 738, size: 11, font });
+    certificatePage.drawText(`Completed At: ${new Date().toISOString()}`, { x: 50, y: 721, size: 11, font });
+    certificatePage.drawText("Signers:", { x: 50, y: 688, size: 12, font });
+    let certY = 668;
+    for (const sig of envelope.signatures) {
+      certificatePage.drawText(
+        `${sig.recipient.fullName} (${sig.recipient.email}) | ${new Date(sig.signedAt).toISOString()}`,
+        { x: 60, y: certY, size: 10, font }
+      );
+      certY -= 16;
+      if (certY < 70) break;
     }
 
     const output = Buffer.from(await pdfDoc.save());

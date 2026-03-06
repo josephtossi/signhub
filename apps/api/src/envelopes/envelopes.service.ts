@@ -136,7 +136,14 @@ export class EnvelopesService {
       data: { status: "SENT" },
       include: { recipients: true }
     });
-    for (const recipient of envelope.recipients) {
+    const recipientsToNotify = envelope.signingOrder
+      ? (() => {
+          const firstOrder = Math.min(...envelope.recipients.map((r) => r.routingOrder));
+          return envelope.recipients.filter((r) => r.routingOrder === firstOrder);
+        })()
+      : envelope.recipients;
+
+    for (const recipient of recipientsToNotify) {
       await this.notifications.queueEmail({
         to: recipient.email,
         subject: envelope.subject || "Signature request",
@@ -273,9 +280,30 @@ export class EnvelopesService {
       take: 10
     });
 
+    const nextToSign = await this.prisma.recipient.findFirst({
+      where: {
+        email: user.email,
+        status: { in: ["PENDING", "SENT", "VIEWED"] }
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        envelope: {
+          include: { document: true }
+        }
+      }
+    });
+
     return {
       counts: { needsMySignature, waitingForOthers, completed, drafts },
-      recent
+      recent,
+      nextToSign: nextToSign
+        ? {
+            envelopeId: nextToSign.envelopeId,
+            recipientId: nextToSign.id,
+            status: nextToSign.status,
+            documentTitle: nextToSign.envelope.document.title
+          }
+        : null
     };
   }
 }

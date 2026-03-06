@@ -19,6 +19,12 @@ type DashboardData = {
     document: { title: string };
     recipients: { email: string; status: string }[];
   }[];
+  nextToSign: {
+    envelopeId: string;
+    recipientId: string;
+    status: string;
+    documentTitle: string;
+  } | null;
 };
 
 export default function DashboardPage() {
@@ -68,12 +74,22 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 md:grid-cols-4">
         {[
-          ["Needs My Signature", data.counts.needsMySignature, "from-amber-400 to-orange-500", "/tracking"],
-          ["Waiting For Others", data.counts.waitingForOthers, "from-blue-500 to-indigo-600", "/tracking"],
-          ["Completed", data.counts.completed, "from-emerald-400 to-green-600", "/tracking"],
+          [
+            "Needs My Signature",
+            data.counts.needsMySignature,
+            "from-amber-400 to-orange-500",
+            data.nextToSign ? `/envelopes/${data.nextToSign.envelopeId}/tracking` : "/tracking"
+          ],
+          ["Waiting For Others", data.counts.waitingForOthers, "from-blue-500 to-indigo-600", "/sent"],
+          ["Completed", data.counts.completed, "from-emerald-400 to-green-600", "/completed"],
           ["Drafts", data.counts.drafts, "from-slate-400 to-slate-600", "/drafts"]
         ].map(([label, value, gradient, href]) => (
-          <Link key={String(label)} href={String(href)} className="glass rounded-xl border border-white/70 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <Link
+            key={String(label)}
+            href={String(href)}
+            onClick={() => console.info("[dashboard] navigate", label, href)}
+            className="glass rounded-xl border border-white/70 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
             <div className={`mb-3 h-1.5 rounded-full bg-gradient-to-r ${gradient}`} />
             <p className="text-sm text-slate-500">{label}</p>
             <p className="mt-1 text-3xl font-semibold">{value}</p>
@@ -91,8 +107,9 @@ export default function DashboardPage() {
         <div className="space-y-2">
           {data.recent.map((item) => (
             <Link
-              href={item.status === "DRAFT" ? `/prepare/${item.id}` : `/tracking/${item.id}`}
+              href={item.status === "DRAFT" ? `/envelopes/${item.id}/prepare` : `/envelopes/${item.id}/tracking`}
               key={item.id}
+              onClick={() => console.info("[dashboard] open envelope", item.id)}
               className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 p-3 transition hover:bg-white"
             >
               <div>

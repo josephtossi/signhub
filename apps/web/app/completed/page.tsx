@@ -43,7 +43,7 @@ export default function CompletedPage() {
             <div key={env.id} className="rounded-md border border-slate-200 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <Link href={`/tracking/${env.id}`} className="font-medium hover:underline">
+                  <Link href={`/envelopes/${env.id}/tracking`} className="font-medium hover:underline">
                     {env.document?.title || "Untitled"}
                   </Link>
                   <p className="text-xs text-slate-500">

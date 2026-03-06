@@ -50,6 +50,11 @@ export class DocumentsController {
     return this.documentsService.getLatestVersion(id);
   }
 
+  @Get(":id")
+  getById(@CurrentUser("sub") userId: string, @Param("id") id: string) {
+    return this.documentsService.getById(userId, id);
+  }
+
   @Get(":id/versions/latest/file")
   async latestFile(@Param("id") id: string, @Res({ passthrough: true }) res: Response) {
     const result = await this.documentsService.getLatestFile(id);

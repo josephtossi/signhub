@@ -38,7 +38,7 @@ export default function SentPage() {
         {envelopes.length === 0 ? <p className="text-sm text-slate-500">No sent envelopes.</p> : null}
         <div className="space-y-2">
           {envelopes.map((env) => (
-            <Link key={env.id} href={`/tracking/${env.id}`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+            <Link key={env.id} href={`/envelopes/${env.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
               <div className="flex items-center justify-between">
                 <p className="font-medium">{env.document?.title || "Untitled"}</p>
                 <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">{env.status}</span>

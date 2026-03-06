@@ -26,6 +26,8 @@ type Props = {
   fields: DraftField[];
   selectedFieldId: string | null;
   signaturePreviewText?: string;
+  placingType?: DraftFieldType | null;
+  onPlacedField?: () => void;
   onSelectField: (id: string | null) => void;
   onFieldsChange: (fields: DraftField[]) => void;
   onError: (message: string) => void;
@@ -42,6 +44,7 @@ const defaultSize: Record<DraftFieldType, { w: number; h: number }> = {
 type DragMode = {
   id: string;
   kind: "move" | "resize";
+  pointerId: number;
   startX: number;
   startY: number;
   startField: DraftField;
@@ -56,6 +59,8 @@ export function PdfPrepareCanvas({
   fields,
   selectedFieldId,
   signaturePreviewText,
+  placingType,
+  onPlacedField,
   onSelectField,
   onFieldsChange,
   onError
@@ -145,10 +150,11 @@ export function PdfPrepareCanvas({
   }, []);
 
   useEffect(() => {
-    function onMouseUp() {
+    function onPointerUp(event: PointerEvent) {
+      if (!dragMode || dragMode.pointerId !== event.pointerId) return;
       setDragMode(null);
     }
-    function onMouseMove(event: MouseEvent) {
+    function onPointerMove(event: PointerEvent) {
       if (!dragMode || displaySize.width === 0 || displaySize.height === 0) return;
       const wrapper = wrapperRef.current;
       if (!wrapper) return;
@@ -178,25 +184,23 @@ export function PdfPrepareCanvas({
         })
       );
     }
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
     };
   }, [dragMode, displaySize.height, displaySize.width, onFieldsChange]);
 
-  function addField(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const type = event.dataTransfer.getData("application/x-field-type") as DraftFieldType;
+  function appendField(type: DraftFieldType, clientX: number, clientY: number) {
     if (!type) return;
 
     const wrapper = wrapperRef.current;
     if (!wrapper || displaySize.width === 0 || displaySize.height === 0) return;
 
     const rect = wrapper.getBoundingClientRect();
-    const x = clamp((event.clientX - rect.left) / displaySize.width, 0, 1);
-    const y = clamp((event.clientY - rect.top) / displaySize.height, 0, 1);
+    const x = clamp((clientX - rect.left) / displaySize.width, 0, 1);
+    const y = clamp((clientY - rect.top) / displaySize.height, 0, 1);
     const size = defaultSize[type];
     const next: DraftField = {
       id: crypto.randomUUID(),
@@ -210,6 +214,23 @@ export function PdfPrepareCanvas({
     };
     onFieldsChange([...fields, next]);
     onSelectField(next.id);
+    onPlacedField?.();
+  }
+
+  function addField(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const type = event.dataTransfer.getData("application/x-field-type") as DraftFieldType;
+    appendField(type, event.clientX, event.clientY);
+  }
+
+  function placeFieldOnTap(event: React.PointerEvent<HTMLDivElement>) {
+    if (!placingType) {
+      onSelectField(null);
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    appendField(placingType, event.clientX, event.clientY);
   }
 
   const renderedFields = useMemo(
@@ -230,7 +251,7 @@ export function PdfPrepareCanvas({
       className="relative inline-block select-none overflow-hidden rounded-xl border border-slate-200 bg-white shadow"
       onDrop={addField}
       onDragOver={(e) => e.preventDefault()}
-      onMouseDown={() => onSelectField(null)}
+      onPointerDown={placeFieldOnTap}
     >
       <canvas ref={canvasRef} className="max-w-full" />
       {loading ? (
@@ -243,13 +264,14 @@ export function PdfPrepareCanvas({
             key={field.id}
             className={`absolute select-none rounded border text-[11px] font-medium transition ${selected ? "border-cyan-500 bg-cyan-100/80 ring-2 ring-cyan-300" : "border-indigo-500 bg-indigo-100/70"}`}
             style={{ left: field.left, top: field.top, width: field.w, height: field.h, touchAction: "none" }}
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
               onSelectField(field.id);
               setDragMode({
                 id: field.id,
                 kind: "move",
+                pointerId: e.pointerId,
                 startX: e.clientX - (wrapperRef.current?.getBoundingClientRect().left || 0),
                 startY: e.clientY - (wrapperRef.current?.getBoundingClientRect().top || 0),
                 startField: field
@@ -272,13 +294,14 @@ export function PdfPrepareCanvas({
             <button
               type="button"
               className="absolute -bottom-1 -right-1 h-3 w-3 cursor-se-resize rounded bg-cyan-600"
-              onMouseDown={(e) => {
+              onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onSelectField(field.id);
                 setDragMode({
                   id: field.id,
                   kind: "resize",
+                  pointerId: e.pointerId,
                   startX: e.clientX - (wrapperRef.current?.getBoundingClientRect().left || 0),
                   startY: e.clientY - (wrapperRef.current?.getBoundingClientRect().top || 0),
                   startField: field

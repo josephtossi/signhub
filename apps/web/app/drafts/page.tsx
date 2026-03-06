@@ -8,10 +8,11 @@ type DraftEnvelope = {
   id: string;
   status: string;
   updatedAt: string;
-  document: { title: string };
+  document: { id: string; title: string };
   recipients: { id: string; fullName: string; email: string }[];
   fields: { id: string }[];
 };
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
 
 export default function DraftsPage() {
   const [drafts, setDrafts] = useState<DraftEnvelope[]>([]);
@@ -38,7 +39,7 @@ export default function DraftsPage() {
             {drafts.map((draft) => (
               <Link
                 key={draft.id}
-                href={`/prepare/${draft.id}`}
+                href={`/envelopes/${draft.id}/prepare`}
                 className="block rounded-lg border border-slate-200 bg-white p-4 transition hover:border-cyan-300 hover:shadow-sm"
               >
                 <div className="flex items-center justify-between">
@@ -49,6 +50,19 @@ export default function DraftsPage() {
                   {draft.recipients.length} recipients, {draft.fields.length} fields, updated{" "}
                   {new Date(draft.updatedAt).toLocaleString()}
                 </p>
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(`${API_BASE}/documents/${draft.document.id}/versions/latest/file`, "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    Download Latest PDF
+                  </button>
+                </div>
               </Link>
             ))}
           </div>

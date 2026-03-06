@@ -78,16 +78,26 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
   const [aiEnabled, setAiEnabled] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [placingType, setPlacingType] = useState<DraftFieldType | null>(null);
+  const envelopeId = params?.envelopeId || "";
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(envelopeId);
 
   useEffect(() => {
+    if (!isUuid) {
+      setError("Invalid envelope ID.");
+      setLoading(false);
+      return;
+    }
     async function load() {
       setLoading(true);
       setError("");
       try {
+        console.info("[prepare] envelopeId", envelopeId);
         const [currentUser, draft] = await Promise.all([
           api<Me>("/auth/me"),
-          api<Envelope>(`/envelopes/${params.envelopeId}`)
+          api<Envelope>(`/envelopes/${envelopeId}`)
         ]);
+        console.info("[prepare] loaded envelope status", draft.status);
         setMe(currentUser);
         setEnvelope(draft);
         setFields(draft.fields || []);
@@ -101,7 +111,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
       }
     }
     load();
-  }, [params.envelopeId]);
+  }, [envelopeId, isUuid]);
 
   const fileUrl = useMemo(() => {
     if (!envelope) return "";
@@ -189,7 +199,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
     try {
       await saveDraft();
       await api(`/envelopes/${envelope.id}/send`, { method: "POST" });
-      router.push(`/tracking/${envelope.id}`);
+      router.push(`/envelopes/${envelope.id}/tracking`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not send envelope");
     } finally {
@@ -252,7 +262,13 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
   }, []);
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading draft envelope...</p>;
+    return (
+      <div className="grid gap-5 lg:grid-cols-[290px,1fr,320px]">
+        <div className="h-[520px] animate-pulse rounded-xl bg-slate-100" />
+        <div className="h-[520px] animate-pulse rounded-xl bg-slate-100" />
+        <div className="h-[520px] animate-pulse rounded-xl bg-slate-100" />
+      </div>
+    );
   }
 
   if (!envelope) {
@@ -278,12 +294,22 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
               type="button"
               draggable
               onDragStart={(e) => e.dataTransfer.setData("application/x-field-type", type)}
+              onClick={() => setPlacingType(type)}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-medium transition hover:border-cyan-400 hover:bg-cyan-50"
             >
-              Drag {fieldLabel(type)}
+              {placingType === type ? `Tap on PDF to place ${fieldLabel(type)}` : `Drag or Tap ${fieldLabel(type)}`}
             </button>
           ))}
         </div>
+        {placingType ? (
+          <button
+            type="button"
+            className="mt-2 w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+            onClick={() => setPlacingType(null)}
+          >
+            Cancel placement mode ({fieldLabel(placingType)})
+          </button>
+        ) : null}
 
         <div className="mt-5 border-t border-slate-200 pt-4">
           <p className="text-sm font-medium">Recipients</p>
@@ -329,6 +355,14 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
         </div>
 
         <div className="mt-5 grid gap-2">
+          <a
+            href={fileUrl || "#"}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700"
+          >
+            Download Latest PDF
+          </a>
           <button
             type="button"
             className="rounded-md bg-cyan-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -355,6 +389,8 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             fields={fields}
             selectedFieldId={selectedFieldId}
             signaturePreviewText={`${me?.firstName || ""} ${me?.lastName || ""}`.trim() || me?.email || "Your Signature"}
+            placingType={placingType}
+            onPlacedField={() => setPlacingType(null)}
             onSelectField={setSelectedFieldId}
             onFieldsChange={setFields}
             onError={handlePdfError}
