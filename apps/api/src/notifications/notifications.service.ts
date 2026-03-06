@@ -7,6 +7,7 @@ import { WebhookPayload, WebhookService } from "./webhook.service";
 @Injectable()
 export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private connection!: ConnectionOptions;
+  private disabled = false;
   private emailQueue!: Queue<EmailPayload>;
   private webhookQueue!: Queue<WebhookPayload>;
   private emailWorker!: Worker<EmailPayload>;
@@ -19,6 +20,11 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (this.config.get("DISABLE_QUEUES", "false") === "true") {
+      this.disabled = true;
+      return;
+    }
+
     const redisUrl = this.config.get("REDIS_URL", "redis://localhost:6379");
     const parsed = new URL(redisUrl);
     this.connection = {
@@ -41,6 +47,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
+    if (this.disabled) return;
     await this.emailWorker?.close();
     await this.webhookWorker?.close();
     await this.emailQueue?.close();
@@ -48,10 +55,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   }
 
   queueEmail(payload: EmailPayload) {
+    if (this.disabled) return this.emailService.send(payload);
     return this.emailQueue.add("send", payload, { attempts: 3, backoff: { type: "exponential", delay: 2000 } });
   }
 
   queueWebhook(payload: WebhookPayload) {
+    if (this.disabled) return this.webhookService.deliver(payload);
     return this.webhookQueue.add("deliver", payload, { attempts: 5, backoff: { type: "exponential", delay: 3000 } });
   }
 }

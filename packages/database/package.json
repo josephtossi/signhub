@@ -6,7 +6,8 @@
   "types": "src/index.ts",
   "scripts": {
     "db:generate": "prisma generate --schema prisma/schema.prisma",
-    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma"
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:push": "prisma db push --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0"
@@ -15,4 +16,3 @@
     "prisma": "^5.20.0"
   }
 }
-

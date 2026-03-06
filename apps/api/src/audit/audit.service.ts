@@ -28,7 +28,7 @@ export class AuditService {
         envelopeId: data.envelopeId,
         actorUserId: data.actorUserId,
         action: data.action,
-        details: data.details as any,
+        details: data.details ? JSON.stringify(data.details) : null,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
         eventHash,
