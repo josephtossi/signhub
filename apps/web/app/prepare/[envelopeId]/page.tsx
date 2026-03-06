@@ -29,6 +29,14 @@ type Me = {
   lastName?: string;
 };
 
+type AiAnalysis = {
+  summary: string;
+  clauses: { type: string; text: string }[];
+  risks: string[];
+  suggestedFields: { type: string; page: number; label: string }[];
+  parties: string[];
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
 const FIELD_TYPES: DraftFieldType[] = ["SIGNATURE", "INITIAL", "DATE", "TEXT", "CHECKBOX"];
 
@@ -62,6 +70,9 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [recipientName, setRecipientName] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
+  const [ai, setAi] = useState<AiAnalysis | null>(null);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -189,6 +200,45 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
     setSelectedFieldId(null);
   }
 
+  async function analyzeContract() {
+    if (!envelope) return;
+    try {
+      const result = await api<AiAnalysis>("/ai/analyze-document", {
+        method: "POST",
+        body: JSON.stringify({ documentId: envelope.documentId })
+      });
+      setAi(result);
+      setAnswer("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "AI analysis failed");
+    }
+  }
+
+  async function askAi() {
+    if (!envelope || !question.trim()) return;
+    try {
+      const result = await api<{ answer: string }>("/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({ documentId: envelope.documentId, question: question.trim() })
+      });
+      setAnswer(result.answer);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "AI chat failed");
+    }
+  }
+
+  async function explainClause(clause: string) {
+    try {
+      const result = await api<{ explanation: string }>("/ai/explain-clause", {
+        method: "POST",
+        body: JSON.stringify({ clause })
+      });
+      alert(result.explanation);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Clause explanation failed");
+    }
+  }
+
   if (loading) {
     return <p className="text-sm text-slate-500">Loading draft envelope...</p>;
   }
@@ -292,6 +342,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             fileUrl={fileUrl}
             fields={fields}
             selectedFieldId={selectedFieldId}
+            signaturePreviewText={`${me?.firstName || ""} ${me?.lastName || ""}`.trim() || me?.email || "Your Signature"}
             onSelectField={setSelectedFieldId}
             onFieldsChange={setFields}
             onError={(message) => setError(`PDF render failed: ${message}`)}
@@ -350,6 +401,70 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             </button>
           </div>
         )}
+
+        <div className="mt-6 border-t border-slate-200 pt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-sm font-semibold">AI Insights</h4>
+            <button
+              type="button"
+              className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white"
+              onClick={analyzeContract}
+            >
+              Analyze
+            </button>
+          </div>
+          {ai ? (
+            <div className="space-y-2 text-xs text-slate-700">
+              <p className="rounded-md bg-slate-100 p-2">{ai.summary}</p>
+              {ai.risks.length > 0 ? (
+                <div>
+                  <p className="font-semibold">Risks</p>
+                  <ul className="list-disc pl-4">
+                    {ai.risks.map((risk) => (
+                      <li key={risk}>{risk}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {ai.clauses.length > 0 ? (
+                <div>
+                  <p className="font-semibold">Key Clauses</p>
+                  <div className="space-y-1">
+                    {ai.clauses.slice(0, 6).map((clause) => (
+                      <button
+                        key={`${clause.type}-${clause.text.slice(0, 30)}`}
+                        type="button"
+                        className="block text-left text-indigo-700 underline"
+                        onClick={() => explainClause(clause.text)}
+                      >
+                        {clause.type}: {clause.text.slice(0, 80)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">Run AI analysis to view summary, clauses, and risk warnings.</p>
+          )}
+
+          <div className="mt-3 space-y-2">
+            <input
+              className="w-full rounded-md border border-slate-300 px-2 py-2 text-xs"
+              placeholder="Ask about this contract..."
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+            />
+            <button
+              type="button"
+              className="w-full rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white"
+              onClick={askAi}
+            >
+              Ask AI
+            </button>
+            {answer ? <p className="rounded-md bg-slate-100 p-2 text-xs">{answer}</p> : null}
+          </div>
+        </div>
 
         {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p> : null}
       </aside>
