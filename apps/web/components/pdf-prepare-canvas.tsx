@@ -62,9 +62,11 @@ export function PdfPrepareCanvas({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const onErrorRef = useRef(onError);
   const fieldsRef = useRef<DraftField[]>(fields);
   const loadingTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
   const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
+  const renderCycleRef = useRef(0);
   const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
   const [dragMode, setDragMode] = useState<DragMode | null>(null);
   const [loading, setLoading] = useState(false);
@@ -74,7 +76,12 @@ export function PdfPrepareCanvas({
   }, [fields]);
 
   useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  useEffect(() => {
     let cancelled = false;
+    const renderCycle = ++renderCycleRef.current;
 
     async function renderPdf() {
       setLoading(true);
@@ -91,7 +98,7 @@ export function PdfPrepareCanvas({
       });
       loadingTaskRef.current = loadingTask;
       const pdf = await loadingTask.promise;
-      if (cancelled) return;
+      if (cancelled || renderCycle !== renderCycleRef.current) return;
       const page = await pdf.getPage(1);
       const viewport = page.getViewport({ scale: 1.35 });
       const canvas = canvasRef.current;
@@ -103,7 +110,7 @@ export function PdfPrepareCanvas({
       const task = page.render({ canvasContext: context, viewport });
       renderTaskRef.current = task;
       await task.promise;
-      if (!cancelled) setLoading(false);
+      if (!cancelled && renderCycle === renderCycleRef.current) setLoading(false);
     }
 
     renderPdf().catch((e: unknown) => {
@@ -112,7 +119,7 @@ export function PdfPrepareCanvas({
       if (name === "RenderingCancelledException") return;
       const message = e instanceof Error ? e.message : "Could not render PDF";
       setLoading(false);
-      onError(message);
+      onErrorRef.current(message);
     });
 
     return () => {
@@ -124,16 +131,16 @@ export function PdfPrepareCanvas({
         loadingTaskRef.current?.destroy();
       } catch {}
     };
-  }, [fileUrl, onError]);
+  }, [fileUrl]);
 
   useEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     const observer = new ResizeObserver(() => {
-      const rect = wrapper.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
       setDisplaySize({ width: rect.width, height: rect.height });
     });
-    observer.observe(wrapper);
+    observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
 
@@ -235,7 +242,7 @@ export function PdfPrepareCanvas({
           <div
             key={field.id}
             className={`absolute select-none rounded border text-[11px] font-medium transition ${selected ? "border-cyan-500 bg-cyan-100/80 ring-2 ring-cyan-300" : "border-indigo-500 bg-indigo-100/70"}`}
-            style={{ left: field.left, top: field.top, width: field.w, height: field.h }}
+            style={{ left: field.left, top: field.top, width: field.w, height: field.h, touchAction: "none" }}
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();

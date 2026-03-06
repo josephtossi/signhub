@@ -69,11 +69,19 @@ API health:
 In a second terminal:
 
 ```bash
-corepack pnpm --filter @signhub/web exec next dev -p 3001
+corepack pnpm --filter @signhub/web dev
 ```
 
 Web URL:
 - `http://localhost:3001`
+
+If the web app fails with `localhost refused to connect` or repeated 500 errors on `_next/static/*`, run:
+
+```bash
+# from apps/web
+Remove-Item -Recurse -Force .next
+corepack pnpm --filter @signhub/web dev
+```
 
 ## Core API routes (current)
 
@@ -81,6 +89,9 @@ Web URL:
 - `POST /v1/auth/login`
 - `POST /v1/auth/logout`
 - `GET /v1/auth/me`
+- `GET /v1/users/me/profile`
+- `PATCH /v1/users/me/profile`
+- `PATCH /v1/users/me/password`
 - `GET /v1/dashboard`
 - `POST /v1/documents` (JSON create or multipart upload+create)
 - `POST /v1/documents/upload` (multipart upload+create)
@@ -88,9 +99,37 @@ Web URL:
 - `POST /v1/envelopes/send`
 - `GET /v1/envelopes/:id`
 - `POST /v1/sign/:token`
+- `POST /v1/sign/:token/submit`
+- `GET /v1/ai/status`
 - `POST /v1/ai/analyze-document`
 - `POST /v1/ai/chat`
 - `POST /v1/ai/explain-clause`
+
+Signing token routes:
+- `GET /v1/sign/:token/session`
+- `GET /v1/sign/:token/document`
+- `POST /v1/sign/:token/submit`
+- `POST /v1/sign/:token/complete`
+
+When all signer recipients complete required fields, SignHub now:
+- marks envelope `COMPLETED`
+- generates a final signed PDF with field overlays
+- stores it as a new `document_versions` row (latest version)
+
+## App Routes
+
+- `/login`, `/signup`
+- `/dashboard`
+- `/documents`
+- `/upload`
+- `/drafts`
+- `/prepare/:envelopeId`
+- `/sent`
+- `/completed`
+- `/tracking`, `/tracking/:envelopeId`
+- `/ai-insights`
+- `/account`
+- `/settings`
 
 ## Quick manual test (PowerShell)
 

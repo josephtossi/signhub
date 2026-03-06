@@ -18,6 +18,10 @@ export class AiService {
 
   constructor(private readonly documentsService: DocumentsService) {}
 
+  status() {
+    return { enabled: Boolean(this.openai) };
+  }
+
   async analyzeDocument(documentId: string): Promise<AnalysisResult> {
     const text = await this.getDocumentText(documentId);
 
@@ -115,4 +119,3 @@ export class AiService {
     };
   }
 }
-

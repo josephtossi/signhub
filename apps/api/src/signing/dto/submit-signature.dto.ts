@@ -1,4 +1,5 @@
-import { IsEnum, IsOptional, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import { IsBoolean, IsEnum, IsOptional, IsString } from "class-validator";
 
 enum SignatureKind {
   DRAW = "DRAW",
@@ -16,4 +17,17 @@ export class SubmitSignatureDto {
   @IsOptional()
   @IsString()
   imageBase64?: string;
+
+  @IsOptional()
+  @IsString()
+  typedSignature?: string;
+
+  @IsOptional()
+  @IsString()
+  value?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  checked?: boolean;
 }

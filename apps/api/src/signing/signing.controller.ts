@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Req, Res, StreamableFile } from "@nestjs/common";
 import { Request } from "express";
+import { Response } from "express";
 import { SubmitSignatureDto } from "./dto/submit-signature.dto";
 import { SigningService } from "./signing.service";
 
@@ -10,6 +11,16 @@ export class SigningController {
   @Get(":token/session")
   getSession(@Param("token") token: string) {
     return this.signingService.getSession(token);
+  }
+
+  @Get(":token/document")
+  async document(@Param("token") token: string, @Res({ passthrough: true }) res: Response) {
+    const result = await this.signingService.getDocumentFile(token);
+    res.set({
+      "Content-Type": result.contentType,
+      "Cache-Control": "no-store"
+    });
+    return new StreamableFile(result.file);
   }
 
   @Post(":token/submit")

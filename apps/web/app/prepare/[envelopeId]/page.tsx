@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { DraftField, DraftFieldType, PdfPrepareCanvas } from "@/components/pdf-prepare-canvas";
@@ -37,6 +37,10 @@ type AiAnalysis = {
   parties: string[];
 };
 
+type AiStatus = {
+  enabled: boolean;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
 const FIELD_TYPES: DraftFieldType[] = ["SIGNATURE", "INITIAL", "DATE", "TEXT", "CHECKBOX"];
 
@@ -71,6 +75,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
   const [recipientName, setRecipientName] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [ai, setAi] = useState<AiAnalysis | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
 
@@ -86,6 +91,9 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
         setMe(currentUser);
         setEnvelope(draft);
         setFields(draft.fields || []);
+        api<AiStatus>("/ai/status")
+          .then((s) => setAiEnabled(s.enabled))
+          .catch(() => setAiEnabled(false));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load draft");
       } finally {
@@ -233,11 +241,15 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
         method: "POST",
         body: JSON.stringify({ clause })
       });
-      alert(result.explanation);
+      setAnswer(result.explanation);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Clause explanation failed");
     }
   }
+
+  const handlePdfError = useCallback((message: string) => {
+    setError(`PDF render failed: ${message}`);
+  }, []);
 
   if (loading) {
     return <p className="text-sm text-slate-500">Loading draft envelope...</p>;
@@ -345,7 +357,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             signaturePreviewText={`${me?.firstName || ""} ${me?.lastName || ""}`.trim() || me?.email || "Your Signature"}
             onSelectField={setSelectedFieldId}
             onFieldsChange={setFields}
-            onError={(message) => setError(`PDF render failed: ${message}`)}
+            onError={handlePdfError}
           />
         ) : (
           <div className="grid h-[500px] place-items-center rounded-xl border border-dashed border-slate-300 bg-white text-sm text-slate-500">
@@ -409,10 +421,14 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
               type="button"
               className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white"
               onClick={analyzeContract}
+              disabled={!aiEnabled}
             >
               Analyze
             </button>
           </div>
+          {!aiEnabled ? (
+            <p className="mb-2 text-xs text-amber-700">AI is disabled. Set `OPENAI_API_KEY` on the API server.</p>
+          ) : null}
           {ai ? (
             <div className="space-y-2 text-xs text-slate-700">
               <p className="rounded-md bg-slate-100 p-2">{ai.summary}</p>

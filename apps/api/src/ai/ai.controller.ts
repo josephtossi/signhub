@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { AiService } from "./ai.service";
 
@@ -6,6 +6,11 @@ import { AiService } from "./ai.service";
 @Controller("ai")
 export class AiController {
   constructor(private readonly aiService: AiService) {}
+
+  @Get("status")
+  status() {
+    return this.aiService.status();
+  }
 
   @Post("analyze-document")
   analyze(@Body("documentId") documentId: string) {
@@ -22,4 +27,3 @@ export class AiController {
     return this.aiService.explainClause(clause);
   }
 }
-
