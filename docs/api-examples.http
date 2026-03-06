@@ -49,6 +49,14 @@ Content-Type: application/pdf
 < ./nda.pdf
 --boundary--
 
+### Get latest document version
+GET http://localhost:4000/v1/documents/{{documentId}}/versions/latest
+Authorization: Bearer {{accessToken}}
+
+### Stream latest PDF file
+GET http://localhost:4000/v1/documents/{{documentId}}/versions/latest/file
+Authorization: Bearer {{accessToken}}
+
 ### Create envelope
 POST http://localhost:4000/v1/envelopes
 Authorization: Bearer {{accessToken}}
@@ -77,6 +85,28 @@ Authorization: Bearer {{accessToken}}
 GET http://localhost:4000/v1/envelopes/{{envelopeId}}/status
 Authorization: Bearer {{accessToken}}
 
+### Save signature fields (normalized coordinates)
+POST http://localhost:4000/v1/envelopes/{{envelopeId}}/fields
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "fields": [
+    {
+      "type": "SIGNATURE",
+      "page": 1,
+      "x": 0.25,
+      "y": 0.68,
+      "width": 0.18,
+      "height": 0.06
+    }
+  ]
+}
+
+### List fields
+GET http://localhost:4000/v1/envelopes/{{envelopeId}}/fields
+Authorization: Bearer {{accessToken}}
+
 ### Signing session
 GET http://localhost:4000/v1/sign/{{signToken}}/session
 
@@ -96,4 +126,3 @@ POST http://localhost:4000/v1/sign/{{signToken}}/complete
 ### Audit log
 GET http://localhost:4000/v1/audit/envelope/{{envelopeId}}
 Authorization: Bearer {{accessToken}}
-

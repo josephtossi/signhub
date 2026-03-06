@@ -28,7 +28,7 @@ export class AuditService {
         envelopeId: data.envelopeId,
         actorUserId: data.actorUserId,
         action: data.action,
-        details: data.details,
+        details: data.details as any,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
         eventHash,

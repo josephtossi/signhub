@@ -14,6 +14,7 @@ class RecipientDto {
 
   @IsOptional()
   @IsInt()
+  @Type(() => Number)
   routingOrder?: number;
 }
 

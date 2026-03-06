@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { PrismaService } from "../common/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { CreateEnvelopeDto } from "./dto/create-envelope.dto";
+import { SaveFieldsDto } from "./dto/save-fields.dto";
 
 @Injectable()
 export class EnvelopesService {
@@ -56,9 +57,40 @@ export class EnvelopesService {
   async status(envelopeId: string) {
     const envelope = await this.prisma.envelope.findUnique({
       where: { id: envelopeId },
-      include: { recipients: true, signatures: true }
+      include: { recipients: true, signatures: true, fields: true, document: true }
     });
     if (!envelope) throw new NotFoundException("Envelope not found");
     return envelope;
+  }
+
+  async saveFields(envelopeId: string, dto: SaveFieldsDto) {
+    await this.prisma.envelope.findUniqueOrThrow({ where: { id: envelopeId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.field.deleteMany({ where: { envelopeId, type: "SIGNATURE" } });
+      if (dto.fields.length > 0) {
+        await tx.field.createMany({
+          data: dto.fields.map((f) => ({
+            envelopeId,
+            recipientId: f.recipientId,
+            type: f.type,
+            page: f.page,
+            x: f.x,
+            y: f.y,
+            width: f.width,
+            height: f.height,
+            required: true
+          }))
+        });
+      }
+    });
+
+    return this.prisma.field.findMany({ where: { envelopeId }, orderBy: { createdAt: "asc" } });
+  }
+
+  listFields(envelopeId: string) {
+    return this.prisma.field.findMany({
+      where: { envelopeId },
+      orderBy: { createdAt: "asc" }
+    });
   }
 }

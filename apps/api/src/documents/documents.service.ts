@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash, randomUUID } from "crypto";
 import { PrismaService } from "../common/prisma.service";
 import { S3Service } from "./s3.service";
@@ -21,6 +21,10 @@ export class DocumentsService {
   }
 
   async uploadVersion(documentId: string, file: Express.Multer.File) {
+    if (!file) throw new BadRequestException("File is required");
+    const isPdf = file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf");
+    if (!isPdf) throw new BadRequestException("Only PDF files are allowed");
+
     const document = await this.prisma.document.findUnique({ where: { id: documentId } });
     if (!document) throw new NotFoundException("Document not found");
 
@@ -28,13 +32,17 @@ export class DocumentsService {
     const storageKey = `documents/${documentId}/${randomUUID()}-${file.originalname}`;
     await this.s3.upload(storageKey, file.buffer, file.mimetype || "application/octet-stream");
 
-    return this.prisma.documentVersion.create({
+    const version = await this.prisma.documentVersion.create({
       data: {
         documentId,
         storageKey,
         sha256
       }
     });
+    return {
+      ...version,
+      sha256
+    };
   }
 
   list(organizationId: string) {
@@ -42,5 +50,24 @@ export class DocumentsService {
       where: { organizationId },
       include: { versions: true }
     });
+  }
+
+  async getLatestVersion(documentId: string) {
+    const version = await this.prisma.documentVersion.findFirst({
+      where: { documentId },
+      orderBy: { createdAt: "desc" }
+    });
+    if (!version) throw new NotFoundException("No document version found");
+    return version;
+  }
+
+  async getLatestFile(documentId: string) {
+    const version = await this.getLatestVersion(documentId);
+    const object = await this.s3.getObject(version.storageKey);
+    return {
+      file: object.body,
+      contentType: object.contentType,
+      version
+    };
   }
 }

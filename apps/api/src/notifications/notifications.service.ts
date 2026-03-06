@@ -1,13 +1,12 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Job, Queue, Worker } from "bullmq";
-import IORedis from "ioredis";
+import { ConnectionOptions, Job, Queue, Worker } from "bullmq";
 import { EmailPayload, EmailService } from "./email.service";
 import { WebhookPayload, WebhookService } from "./webhook.service";
 
 @Injectable()
 export class NotificationsService implements OnModuleInit, OnModuleDestroy {
-  private connection!: IORedis;
+  private connection!: ConnectionOptions;
   private emailQueue!: Queue<EmailPayload>;
   private webhookQueue!: Queue<WebhookPayload>;
   private emailWorker!: Worker<EmailPayload>;
@@ -20,9 +19,12 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.connection = new IORedis(this.config.get("REDIS_URL", "redis://localhost:6379"), {
-      maxRetriesPerRequest: null
-    });
+    const redisUrl = this.config.get("REDIS_URL", "redis://localhost:6379");
+    const parsed = new URL(redisUrl);
+    this.connection = {
+      host: parsed.hostname,
+      port: Number(parsed.port || 6379)
+    };
     this.emailQueue = new Queue<EmailPayload>("emails", { connection: this.connection });
     this.webhookQueue = new Queue<WebhookPayload>("webhooks", { connection: this.connection });
 
@@ -43,7 +45,6 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     await this.webhookWorker?.close();
     await this.emailQueue?.close();
     await this.webhookQueue?.close();
-    await this.connection?.quit();
   }
 
   queueEmail(payload: EmailPayload) {
@@ -54,4 +55,3 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     return this.webhookQueue.add("deliver", payload, { attempts: 5, backoff: { type: "exponential", delay: 3000 } });
   }
 }
-

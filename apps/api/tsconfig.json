@@ -1,12 +1,12 @@
 {
-  "extends": "@signhub/config/tsconfig.nest",
+  "extends": "../../packages/config/tsconfig.nest.json",
   "compilerOptions": {
+    "outDir": "dist",
     "baseUrl": "./",
     "paths": {
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
-
