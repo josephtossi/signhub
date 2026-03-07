@@ -64,6 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState("");
   const [routeLoading, setRouteLoading] = useState(false);
   const routeLoadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const authCheckedRef = useRef(false);
 
   const publicRoute = isPublicRoute(pathname);
   const authRoute = pathname === "/login" || pathname === "/signup";
@@ -73,27 +74,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setAuthLoading(false);
       return;
     }
+    if (authCheckedRef.current) {
+      setAuthLoading(false);
+      return;
+    }
 
     let cancelled = false;
     setAuthLoading(true);
     setError("");
-    api<SessionUser>("/auth/me")
-      .then((me) => {
-        if (!cancelled) setUser(me);
-      })
-      .catch(() => {
+    const verify = async () => {
+      try {
+        const me = await api<SessionUser>("/auth/me");
+        if (!cancelled) {
+          setUser(me);
+          authCheckedRef.current = true;
+          setAuthLoading(false);
+        }
+        return;
+      } catch {
+        // Retry once to absorb transient cross-origin cookie timing failures.
+      }
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const me = await api<SessionUser>("/auth/me");
+        if (!cancelled) {
+          setUser(me);
+          authCheckedRef.current = true;
+          setAuthLoading(false);
+        }
+      } catch {
         if (!cancelled) {
           setUser(null);
+          setAuthLoading(false);
           router.replace("/login");
         }
-      })
-      .finally(() => {
-        if (!cancelled) setAuthLoading(false);
-      });
+      }
+    };
+    verify();
     return () => {
       cancelled = true;
     };
-  }, [publicRoute, router, pathname]);
+  }, [publicRoute, router]);
 
   useEffect(() => {
     if (routeLoadingTimeoutRef.current) clearTimeout(routeLoadingTimeoutRef.current);
