@@ -1,9 +1,24 @@
 # SignHub
 
-Monorepo for an electronic signature platform with:
-- `apps/web` (Next.js 14)
-- `apps/api` (NestJS)
-- `packages/database` (Prisma)
+SignHub is an electronic signature SaaS (DocuSign-style) built as a monorepo.
+
+## What this app does
+
+- User authentication (signup/login/logout/session)
+- Upload PDF documents
+- Create envelopes and recipients
+- Prepare document fields (signature, initials, date, text, checkbox)
+- Save drafts and reopen/edit drafts
+- Send envelopes for signing
+- Recipient signing flow with secure token links
+- Envelope tracking (status + recipient progress)
+- Download latest merged PDF (with fields/signatures)
+- AI contract assistant:
+  - Works with OpenAI when `OPENAI_API_KEY` is set
+  - Falls back to built-in heuristic mode when key is missing
+- Saved user signatures:
+  - Draw/type/upload signature
+  - Save default signature and reuse in future documents
 
 ## Run locally (no Docker)
 
@@ -104,6 +119,9 @@ corepack pnpm --filter @signhub/web dev
 - `POST /v1/ai/analyze-document`
 - `POST /v1/ai/chat`
 - `POST /v1/ai/explain-clause`
+- `GET /v1/users/signature`
+- `POST /v1/users/signature`
+- `PUT /v1/users/signature`
 
 Signing token routes:
 - `GET /v1/sign/:token/session`
@@ -115,6 +133,8 @@ When all signer recipients complete required fields, SignHub now:
 - marks envelope `COMPLETED`
 - generates a final signed PDF with field overlays
 - stores it as a new `document_versions` row (latest version)
+
+If a recipient already signed, signing endpoints block re-sign attempts.
 
 ## App Routes
 
@@ -130,6 +150,45 @@ When all signer recipients complete required fields, SignHub now:
 - `/ai-insights`
 - `/account`
 - `/settings`
+
+## Product flow
+
+1. Signup/Login
+- Create account on `/signup` and login on `/login`.
+
+2. Upload document
+- Go to `/upload`, choose a PDF, and create a document record.
+
+3. Create + prepare envelope
+- Open a draft (`/prepare/:envelopeId`).
+- Add recipients.
+- Drag/tap fields on PDF pages.
+- Assign fields to recipients.
+- Save as draft.
+
+4. Send envelope
+- Click `Send Envelope`.
+- Recipients receive secure links (`/sign/:token`).
+
+5. Recipient signs
+- Recipient opens sign link.
+- Fills required fields and signs.
+- Can use saved signature if authenticated.
+- Submits signature and completes their turn.
+
+6. Track progress
+- Open tracking page (`/tracking/:envelopeId`).
+- See statuses per recipient and envelope progress.
+
+7. Download PDF
+- Download latest merged PDF from prepare/tracking/completed areas.
+- Final PDF includes all signed field overlays + completion certificate page.
+
+## AI assistant behavior
+
+- `GET /v1/ai/status` returns provider mode.
+- Without `OPENAI_API_KEY`, AI remains usable via built-in heuristic mode.
+- With key configured, responses use OpenAI models.
 
 ## Quick manual test (PowerShell)
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
-type AiStatus = { enabled: boolean };
+type AiStatus = { enabled: boolean; provider?: "openai" | "heuristic" };
 
 type Membership = { organizationId: string };
 type MeResponse = { memberships: Membership[] };
@@ -19,6 +19,7 @@ type AiAnalysis = {
 
 export default function AiInsightsPage() {
   const [enabled, setEnabled] = useState(false);
+  const [provider, setProvider] = useState<"openai" | "heuristic">("heuristic");
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentId, setDocumentId] = useState("");
   const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
@@ -32,6 +33,7 @@ export default function AiInsightsPage() {
       try {
         const [status, me] = await Promise.all([api<AiStatus>("/ai/status"), api<MeResponse>("/auth/me")]);
         setEnabled(status.enabled);
+        setProvider(status.provider || "heuristic");
         const orgId = me.memberships?.[0]?.organizationId;
         if (!orgId) return;
         const docs = await api<DocumentItem[]>(`/documents?organizationId=${encodeURIComponent(orgId)}`);
@@ -82,11 +84,9 @@ export default function AiInsightsPage() {
         <p className="mt-1 text-slate-200">Summaries, clause extraction, risk checks, and contract Q&A.</p>
       </section>
 
-      {!enabled ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          AI is disabled. Set `OPENAI_API_KEY` in your API environment to enable AI insights.
-        </section>
-      ) : null}
+      <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-800">
+        AI provider: <span className="font-semibold">{provider === "openai" ? "OpenAI" : "Built-in heuristic (no API key required)"}</span>
+      </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="grid gap-2 sm:grid-cols-[1fr,auto]">

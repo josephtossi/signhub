@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
 type SessionUser = {
@@ -64,6 +64,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [error, setError] = useState("");
+  const [routeLoading, setRouteLoading] = useState(false);
+  const routeLoadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const publicRoute = isPublicRoute(pathname);
 
@@ -94,6 +96,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [publicRoute, router, pathname]);
 
+  useEffect(() => {
+    if (routeLoadingTimeoutRef.current) clearTimeout(routeLoadingTimeoutRef.current);
+    routeLoadingTimeoutRef.current = setTimeout(() => setRouteLoading(false), 250);
+    return () => {
+      if (routeLoadingTimeoutRef.current) clearTimeout(routeLoadingTimeoutRef.current);
+    };
+  }, [pathname]);
+
+  useEffect(() => {
+    function onAnchorClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || !href.startsWith("/") || href.startsWith("//")) return;
+      if (href === pathname) return;
+      setRouteLoading(true);
+    }
+    document.addEventListener("click", onAnchorClick, true);
+    return () => document.removeEventListener("click", onAnchorClick, true);
+  }, [pathname]);
+
   async function logout() {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -121,6 +145,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
+      {routeLoading ? (
+        <div className="fixed inset-x-0 top-0 z-[100] h-1 bg-gradient-to-r from-cyan-500 via-indigo-500 to-cyan-500 animate-pulse" />
+      ) : null}
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">

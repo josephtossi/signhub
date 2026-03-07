@@ -19,7 +19,7 @@ export class AiService {
   constructor(private readonly documentsService: DocumentsService) {}
 
   status() {
-    return { enabled: Boolean(this.openai) };
+    return { enabled: true, provider: this.openai ? "openai" : "heuristic" };
   }
 
   async analyzeDocument(documentId: string): Promise<AnalysisResult> {
@@ -56,7 +56,7 @@ export class AiService {
   async chat(documentId: string, question: string) {
     const text = await this.getDocumentText(documentId);
     if (!this.openai) {
-      return { answer: `AI key not configured. Question received: "${question}".` };
+      return { answer: this.heuristicAnswer(text, question) };
     }
 
     const completion = await this.openai.chat.completions.create({
@@ -117,5 +117,28 @@ export class AiService {
       suggestedFields: [{ type: "SIGNATURE", page: 1, label: "Signature" }],
       parties
     };
+  }
+
+  private heuristicAnswer(text: string, question: string) {
+    const q = question.trim().toLowerCase();
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 20);
+    if (!lines.length) return "No extractable text found in this document.";
+
+    const keywords = q.split(/\s+/).filter((k) => k.length > 3);
+    const ranked = lines
+      .map((line) => ({
+        line,
+        score: keywords.reduce((acc, key) => (line.toLowerCase().includes(key) ? acc + 1 : acc), 0)
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    const top = ranked.filter((r) => r.score > 0).slice(0, 3).map((r) => r.line);
+    if (!top.length) {
+      return "No direct matching clause found. Try asking about payment, termination, renewal, or liability.";
+    }
+    return top.join(" ");
   }
 }

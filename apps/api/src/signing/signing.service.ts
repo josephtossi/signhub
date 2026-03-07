@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomUUID } from "crypto";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { PrismaService } from "../common/prisma.service";
@@ -17,6 +17,10 @@ export class SigningService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService
   ) {}
+
+  private isSignerRole(role: string | null | undefined) {
+    return (role || "").trim().toUpperCase() !== "CC";
+  }
 
   private async ensureUserSignatureTable() {
     await this.prisma.$executeRawUnsafe(`
@@ -79,6 +83,7 @@ export class SigningService {
       include: {
         envelope: {
           include: {
+            recipients: true,
             document: {
               include: {
                 versions: { orderBy: { createdAt: "desc" }, take: 1 }
@@ -96,10 +101,12 @@ export class SigningService {
         data: { status: "VIEWED", lastViewedAt: new Date() }
       });
     }
+    const signerCount = recipient.envelope.recipients.filter((r) => this.isSignerRole(r.role)).length;
+    const includeUnassigned = signerCount <= 1;
     const actionableFields = await this.prisma.field.findMany({
       where: {
         envelopeId: recipient.envelopeId,
-        OR: [{ recipientId: recipient.id }, { recipientId: null }]
+        OR: includeUnassigned ? [{ recipientId: recipient.id }, { recipientId: null }] : [{ recipientId: recipient.id }]
       },
       orderBy: { createdAt: "asc" }
     });
@@ -110,6 +117,7 @@ export class SigningService {
       fullName: recipient.fullName,
       email: recipient.email,
       status: recipient.status,
+      canSign: recipient.status !== "SIGNED",
       document: {
         id: recipient.envelope.document.id,
         title: recipient.envelope.document.title
@@ -135,15 +143,40 @@ export class SigningService {
       include: { envelope: true }
     });
     if (!recipient) throw new NotFoundException("Recipient not found");
+    if (recipient.signedAt || recipient.status === "SIGNED") {
+      throw new ConflictException("This recipient has already signed and cannot sign again.");
+    }
+    const allRecipients = await this.prisma.recipient.findMany({ where: { envelopeId: recipient.envelopeId } });
+    const signerCount = allRecipients.filter((r) => this.isSignerRole(r.role)).length;
+    const includeUnassigned = signerCount <= 1;
 
-    const field = await this.prisma.field.findFirst({
+    let field = await this.prisma.field.findFirst({
       where: {
         id: dto.fieldId,
         envelopeId: recipient.envelopeId,
-        OR: [{ recipientId: recipient.id }, { recipientId: null }]
+        OR: includeUnassigned ? [{ recipientId: recipient.id }, { recipientId: null }] : [{ recipientId: recipient.id }]
       }
     });
     if (!field) throw new NotFoundException("Field not found for signer");
+
+    if (!field.recipientId) {
+      if (!includeUnassigned) {
+        throw new ConflictException("This field must be assigned to a recipient before signing.");
+      }
+      const claimed = await this.prisma.field.updateMany({
+        where: { id: field.id, recipientId: null },
+        data: { recipientId: recipient.id }
+      });
+      if (claimed.count === 0) {
+        const reloaded = await this.prisma.field.findUnique({ where: { id: field.id } });
+        if (!reloaded || reloaded.recipientId !== recipient.id) {
+          throw new ConflictException("This field has already been assigned to another signer.");
+        }
+        field = reloaded;
+      } else {
+        field = { ...field, recipientId: recipient.id };
+      }
+    }
 
     if (field.type === "SIGNATURE" || field.type === "INITIAL") {
       if (!dto.imageBase64) {
@@ -216,12 +249,23 @@ export class SigningService {
 
   async complete(token: string, meta: { ipAddress?: string; userAgent?: string }) {
     const recipient = await this.prisma.recipient.findFirst({
-      where: { accessToken: token }
+      where: { accessToken: token },
+      include: { envelope: true }
     });
     if (!recipient) throw new NotFoundException("Recipient not found");
+    if (recipient.signedAt || recipient.status === "SIGNED") {
+      throw new ConflictException("This recipient has already signed and cannot sign again.");
+    }
 
     const state = await this.refreshEnvelopeProgress(recipient.envelopeId, recipient.id, meta, true);
-    return { ok: true, ...state };
+    const webBase = process.env.WEB_APP_URL || "http://localhost:3001";
+    return {
+      ok: true,
+      ...state,
+      envelopeId: recipient.envelopeId,
+      trackingUrl: `${webBase}/envelopes/${recipient.envelopeId}/tracking`,
+      signedDocumentUrl: `${process.env.API_BASE_URL || "http://localhost:4000/v1"}/envelopes/${recipient.envelopeId}/download`
+    };
   }
 
   async getDocumentFile(token: string) {
@@ -251,51 +295,108 @@ export class SigningService {
     meta: { ipAddress?: string; userAgent?: string },
     requireAllFields = false
   ) {
-    const [recipient, fields, signatures] = await Promise.all([
-      this.prisma.recipient.findUnique({ where: { id: recipientId } }),
-      this.prisma.field.findMany({ where: { envelopeId } }),
-      this.prisma.signature.findMany({ where: { envelopeId } })
-    ]);
-    if (!recipient) throw new NotFoundException("Recipient not found");
+    const txResult = await this.prisma.$transaction(async (tx) => {
+      const [recipient, envelope, fields, signatures, recipients] = await Promise.all([
+        tx.recipient.findUnique({ where: { id: recipientId } }),
+        tx.envelope.findUnique({ where: { id: envelopeId } }),
+        tx.field.findMany({ where: { envelopeId } }),
+        tx.signature.findMany({ where: { envelopeId } }),
+        tx.recipient.findMany({ where: { envelopeId }, orderBy: { routingOrder: "asc" } })
+      ]);
+      if (!recipient) throw new NotFoundException("Recipient not found");
+      if (!envelope) throw new NotFoundException("Envelope not found");
 
-    const assigned = fields.filter((f) => f.recipientId === recipientId || f.recipientId === null);
-    const required = assigned.filter((f) => f.required);
-    const isFieldCompleted = (fieldId: string) => {
-      const field = assigned.find((f) => f.id === fieldId);
-      if (!field) return false;
-      if (field.type === "SIGNATURE" || field.type === "INITIAL") {
-        return signatures.some((s) => s.fieldId === fieldId && s.recipientId === recipientId);
-      }
-      if (field.type === "CHECKBOX") return field.value === "true";
-      return Boolean(field.value && String(field.value).trim().length > 0);
-    };
+      const includeUnassigned = signerRecipients.length <= 1;
+      const assignedToRecipient = fields.filter(
+        (f) => f.recipientId === recipientId || (includeUnassigned && f.recipientId === null)
+      );
+      const required = assignedToRecipient.filter((f) => f.required);
+      const isFieldCompleted = (field: (typeof fields)[number]) => {
+        if (field.type === "SIGNATURE" || field.type === "INITIAL") {
+          return signatures.some((s) => s.fieldId === field.id && s.recipientId === recipientId);
+        }
+        if (field.type === "CHECKBOX") return field.value === "true";
+        return Boolean(field.value && String(field.value).trim().length > 0);
+      };
 
-    const allRequiredDone = required.every((f) => isFieldCompleted(f.id));
-    const wasSignedBefore = recipient.status === "SIGNED";
-    let justSigned = false;
-    if (allRequiredDone || (!requireAllFields && assigned.length === 0)) {
-      if (recipient.status !== "SIGNED") {
-        await this.prisma.recipient.update({
+      const allRequiredDone = required.every((f) => isFieldCompleted(f));
+      const signerRecipients = recipients.filter((r) => this.isSignerRole(r.role));
+
+      const requiredSignerIds = signerRecipients.map((r) => r.id);
+
+      let justSigned = false;
+      if (requireAllFields) {
+        if (!allRequiredDone) {
+          throw new BadRequestException("Required fields are not completed yet.");
+        }
+        await tx.recipient.update({
           where: { id: recipientId },
           data: { status: "SIGNED", signedAt: new Date() }
         });
         justSigned = true;
       }
-    } else if (requireAllFields) {
-      throw new NotFoundException("Required fields are not completed yet");
-    }
 
-    const refreshedRecipients = await this.prisma.recipient.findMany({ where: { envelopeId } });
-    const signerRecipients = refreshedRecipients.filter((r) => r.role === "SIGNER");
-    const unsignedCount = signerRecipients.filter((r) => r.status !== "SIGNED").length;
+      const refreshedRecipients = await tx.recipient.findMany({ where: { envelopeId }, orderBy: { routingOrder: "asc" } });
+      const requiredUnsignedCount = requiredSignerIds.filter((id) => {
+        const r = refreshedRecipients.find((x) => x.id === id);
+        return !r?.signedAt;
+      }).length;
 
-    let envelopeStatus = "SENT";
-    if (unsignedCount === 0 && signerRecipients.length > 0) {
-      envelopeStatus = "COMPLETED";
-      await this.prisma.envelope.update({
-        where: { id: envelopeId },
-        data: { status: "COMPLETED", completedAt: new Date() }
-      });
+      const signedRequiredCount = requiredSignerIds.length - requiredUnsignedCount;
+      let envelopeStatus = "SENT";
+      let becameCompleted = false;
+
+      if (requiredSignerIds.length > 0 && requiredUnsignedCount === 0) {
+        envelopeStatus = "COMPLETED";
+        const updated = await tx.envelope.updateMany({
+          where: { id: envelopeId, status: { not: "COMPLETED" } },
+          data: {
+            status: "COMPLETED",
+            completedAt: envelope.completedAt ?? new Date()
+          }
+        });
+        becameCompleted = updated.count > 0;
+      } else {
+        envelopeStatus = signedRequiredCount > 0 ? "PARTIALLY_SIGNED" : "SENT";
+        await tx.envelope.update({
+          where: { id: envelopeId },
+          data: { status: envelopeStatus, completedAt: null }
+        });
+      }
+
+      let nextRecipients: Array<{ email: string; fullName: string; accessToken: string | null; subject: string | null }> = [];
+      if (envelope.signingOrder && requireAllFields && justSigned) {
+        const current = refreshedRecipients.find((r) => r.id === recipientId);
+        const pendingNextOrders = refreshedRecipients
+          .filter(
+            (r) =>
+              this.isSignerRole(r.role) &&
+              !r.signedAt &&
+              r.routingOrder > (current?.routingOrder || 0)
+          )
+          .map((r) => r.routingOrder);
+        const nextOrder = pendingNextOrders.length ? Math.min(...pendingNextOrders) : null;
+        if (nextOrder !== null) {
+          nextRecipients = refreshedRecipients
+            .filter((r) => this.isSignerRole(r.role) && !r.signedAt && r.routingOrder === nextOrder)
+            .map((r) => ({
+              email: r.email,
+              fullName: r.fullName,
+              accessToken: r.accessToken,
+              subject: envelope.subject
+            }));
+        }
+      }
+
+      return {
+        envelopeStatus,
+        allRequiredDone,
+        becameCompleted,
+        nextRecipients
+      };
+    });
+
+    if (txResult.becameCompleted) {
       await this.generateFinalSignedPdf(envelopeId);
       await this.audit.append({
         envelopeId,
@@ -304,50 +405,31 @@ export class SigningService {
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent
       });
-    } else {
-      const signedCount = signerRecipients.filter((r) => r.status === "SIGNED").length;
-      envelopeStatus = signedCount > 0 ? "PARTIALLY_SIGNED" : "SENT";
-      await this.prisma.envelope.update({
-        where: { id: envelopeId },
-        data: { status: envelopeStatus }
-      });
     }
 
-    const envelope = await this.prisma.envelope.findUnique({ where: { id: envelopeId } });
-    if (envelope && envelope.signingOrder && justSigned && !wasSignedBefore) {
-      const current = refreshedRecipients.find((r) => r.id === recipientId);
-      const pendingNextOrders = refreshedRecipients
-        .filter((r) => r.role === "SIGNER" && r.status !== "SIGNED" && r.routingOrder > (current?.routingOrder || 0))
-        .map((r) => r.routingOrder);
-      const nextOrder = pendingNextOrders.length ? Math.min(...pendingNextOrders) : null;
-      if (nextOrder !== null) {
-        const nextRecipients = refreshedRecipients.filter(
-          (r) => r.role === "SIGNER" && r.status !== "SIGNED" && r.routingOrder === nextOrder
-        );
-        for (const next of nextRecipients) {
-          await this.notifications.queueEmail({
-            to: next.email,
-            subject: envelope.subject || "Signature request",
-            template: "sign-request",
-            data: {
-              recipientName: next.fullName,
-              signingLink: `${process.env.SIGN_URL_BASE || "http://localhost:3001/sign"}/${next.accessToken}`
-            }
-          });
+    for (const next of txResult.nextRecipients) {
+      if (!next.accessToken) continue;
+      await this.notifications.queueEmail({
+        to: next.email,
+        subject: next.subject || "Signature request",
+        template: "sign-request",
+        data: {
+          recipientName: next.fullName,
+          signingLink: `${process.env.SIGN_URL_BASE || "http://localhost:3001/sign"}/${next.accessToken}`
         }
-      }
+      });
     }
 
     await this.audit.append({
       envelopeId,
-      action: "FIELD_SUBMITTED",
-      details: { recipientId, allRequiredDone },
+      action: requireAllFields ? "RECIPIENT_COMPLETED" : "FIELD_SUBMITTED",
+      details: { recipientId, allRequiredDone: txResult.allRequiredDone },
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent
     });
 
     const latestRecipient = await this.prisma.recipient.findUnique({ where: { id: recipientId } });
-    return { envelopeStatus, recipientStatus: latestRecipient?.status || "PENDING" };
+    return { envelopeStatus: txResult.envelopeStatus, recipientStatus: latestRecipient?.status || "PENDING" };
   }
 
   private async generateFinalSignedPdf(envelopeId: string) {
@@ -373,7 +455,12 @@ export class SigningService {
     }
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    const signaturesByField = new Map(envelope.signatures.map((s) => [s.fieldId, s]));
+    const signaturesByField = new Map<string, typeof envelope.signatures>();
+    for (const sig of envelope.signatures) {
+      const list = signaturesByField.get(sig.fieldId) || [];
+      list.push(sig);
+      signaturesByField.set(sig.fieldId, list);
+    }
 
     for (const field of envelope.fields) {
       const pageIndex = Math.max(0, field.page - 1);
@@ -386,7 +473,10 @@ export class SigningService {
       const y = pageHeight - field.y * pageHeight - h;
 
       if (field.type === "SIGNATURE" || field.type === "INITIAL") {
-        const sig = signaturesByField.get(field.id);
+        const candidates = signaturesByField.get(field.id) || [];
+        const sig = field.recipientId
+          ? candidates.find((x) => x.recipientId === field.recipientId) || candidates[0]
+          : candidates.sort((a, b) => +new Date(b.signedAt) - +new Date(a.signedAt))[0];
         if (sig?.storageKey) {
           const imageFile = await this.s3.getObject(sig.storageKey);
           let embeddedImage;

@@ -9,6 +9,7 @@ type Session = {
   id: string;
   envelopeId: string;
   fullName: string;
+  status?: string;
   document?: { id: string; title: string };
   fields?: Array<{
     id: string;
@@ -114,6 +115,10 @@ export default function SignPage({ params }: { params: { token: string } }) {
 
   async function submit() {
     if (!session) return;
+    if (session.status === "SIGNED") {
+      setError("This signing link was already completed.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     setMessage("");
@@ -343,9 +348,9 @@ export default function SignPage({ params }: { params: { token: string } }) {
           <button
             className="mt-4 rounded-md bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-60"
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || session?.status === "SIGNED"}
           >
-            {submitting ? "Submitting..." : "Submit and Complete"}
+            {session?.status === "SIGNED" ? "Already Signed" : submitting ? "Submitting..." : "Submit and Complete"}
           </button>
           {message ? <p className="mt-3 text-sm text-emerald-700">{message}</p> : null}
           {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

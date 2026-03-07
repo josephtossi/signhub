@@ -18,6 +18,12 @@ type SignField = {
   value?: string | null;
 };
 
+type PageMeta = {
+  page: number;
+  width: number;
+  height: number;
+};
+
 export function PdfSignCanvas({
   fileUrl,
   fields,
@@ -29,76 +35,156 @@ export function PdfSignCanvas({
   completedFieldIds: string[];
   onError: (message: string) => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  const canvasRefs = useRef<Record<number, HTMLCanvasElement | null>>({});
+  const loadingTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
+  const pdfRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const renderTasksRef = useRef<pdfjsLib.RenderTask[]>([]);
+  const [pages, setPages] = useState<PageMeta[]>([]);
+  const [displaySizes, setDisplaySizes] = useState<Record<number, { w: number; h: number }>>({});
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const observer = new ResizeObserver(() => {
-      const rect = canvas.getBoundingClientRect();
-      setSize({ w: rect.width, h: rect.height });
-    });
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    async function render() {
+
+    async function loadMeta() {
+      try {
+        renderTasksRef.current.forEach((task) => task.cancel());
+      } catch {}
+      try {
+        await loadingTaskRef.current?.destroy();
+      } catch {}
+
       const loadingTask = pdfjsLib.getDocument({ url: fileUrl, withCredentials: true });
+      loadingTaskRef.current = loadingTask;
       const pdf = await loadingTask.promise;
       if (cancelled) return;
-      const page = await pdf.getPage(1);
-      const viewport = page.getViewport({ scale: 1.35 });
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvasContext: context, viewport }).promise;
-      if (!cancelled) setLoading(false);
+      pdfRef.current = pdf;
+
+      const metas: PageMeta[] = [];
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.35 });
+        metas.push({ page: pageNum, width: viewport.width, height: viewport.height });
+      }
+      setPages(metas);
     }
-    render().catch((e) => {
+
+    loadMeta().catch((e) => {
       if (cancelled) return;
       setLoading(false);
       onError(e instanceof Error ? e.message : "Could not render PDF");
     });
+
     return () => {
       cancelled = true;
+      try {
+        renderTasksRef.current.forEach((task) => task.cancel());
+      } catch {}
+      try {
+        loadingTaskRef.current?.destroy();
+      } catch {}
     };
   }, [fileUrl, onError]);
 
+  useEffect(() => {
+    if (!pages.length || !pdfRef.current) return;
+    let cancelled = false;
+
+    async function renderPages() {
+      setLoading(true);
+      const pdf = pdfRef.current;
+      if (!pdf) return;
+      const tasks: pdfjsLib.RenderTask[] = [];
+      for (const meta of pages) {
+        if (cancelled) return;
+        const page = await pdf.getPage(meta.page);
+        const viewport = page.getViewport({ scale: 1.35 });
+        const canvas = canvasRefs.current[meta.page];
+        if (!canvas) continue;
+        const context = canvas.getContext("2d");
+        if (!context) continue;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const task = page.render({ canvasContext: context, viewport });
+        tasks.push(task);
+        await task.promise;
+      }
+      renderTasksRef.current = tasks;
+      if (!cancelled) setLoading(false);
+    }
+
+    renderPages().catch((e) => {
+      if (cancelled) return;
+      setLoading(false);
+      onError(e instanceof Error ? e.message : "Could not render PDF");
+    });
+
+    return () => {
+      cancelled = true;
+      try {
+        renderTasksRef.current.forEach((task) => task.cancel());
+      } catch {}
+    };
+  }, [pages, onError]);
+
+  useEffect(() => {
+    const observers: ResizeObserver[] = [];
+    for (const page of pages) {
+      const canvas = canvasRefs.current[page.page];
+      if (!canvas) continue;
+      const observer = new ResizeObserver(() => {
+        const rect = canvas.getBoundingClientRect();
+        setDisplaySizes((prev) => ({
+          ...prev,
+          [page.page]: { w: rect.width, h: rect.height }
+        }));
+      });
+      observer.observe(canvas);
+      observers.push(observer);
+    }
+    return () => observers.forEach((observer) => observer.disconnect());
+  }, [pages]);
+
   const overlays = useMemo(
     () =>
-      fields
-        .filter((f) => f.page === 1)
-        .map((f) => ({
+      fields.map((f) => {
+        const size = displaySizes[f.page] || { w: 0, h: 0 };
+        return {
           ...f,
           left: f.x * size.w,
           top: f.y * size.h,
           w: f.width * size.w,
           h: f.height * size.h,
           completed: completedFieldIds.includes(f.id)
-        })),
-    [completedFieldIds, fields, size.h, size.w]
+        };
+      }),
+    [completedFieldIds, displaySizes, fields]
   );
 
   return (
-    <div ref={wrapperRef} className="relative inline-block overflow-hidden rounded-xl border border-slate-200 bg-white shadow">
-      <canvas ref={canvasRef} className="max-w-full" />
-      {loading ? <div className="absolute inset-0 grid place-items-center bg-white/70 text-sm text-slate-500">Loading PDF...</div> : null}
-      {overlays.map((f) => (
-        <div
-          key={f.id}
-          className={`absolute rounded border px-1 py-0.5 text-[10px] font-medium ${f.completed ? "border-emerald-500 bg-emerald-100/80 text-emerald-700" : "border-amber-500 bg-amber-100/80 text-amber-700"}`}
-          style={{ left: f.left, top: f.top, width: f.w, height: f.h }}
-        >
-          {f.label || f.type}
+    <div className="relative space-y-4">
+      {loading ? <div className="sticky top-2 z-20 rounded-md bg-white/90 p-2 text-center text-sm text-slate-500 shadow">Loading PDF...</div> : null}
+      {pages.map((page) => (
+        <div key={page.page} className="relative inline-block overflow-hidden rounded-xl border border-slate-200 bg-white shadow">
+          <canvas
+            ref={(node) => {
+              canvasRefs.current[page.page] = node;
+            }}
+            className="max-w-full"
+          />
+          {overlays
+            .filter((f) => f.page === page.page)
+            .map((f) => (
+              <div
+                key={f.id}
+                className={`absolute rounded border px-1 py-0.5 text-[10px] font-medium ${f.completed ? "border-emerald-500 bg-emerald-100/80 text-emerald-700" : "border-amber-500 bg-amber-100/80 text-amber-700"}`}
+                style={{ left: f.left, top: f.top, width: f.w, height: f.h }}
+              >
+                {f.label || f.type}
+              </div>
+            ))}
+          <div className="absolute bottom-2 right-2 rounded bg-slate-900/75 px-2 py-1 text-[10px] font-medium text-white">Page {page.page}</div>
         </div>
       ))}
     </div>

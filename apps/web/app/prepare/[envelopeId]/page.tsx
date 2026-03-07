@@ -39,6 +39,7 @@ type AiAnalysis = {
 
 type AiStatus = {
   enabled: boolean;
+  provider?: "openai" | "heuristic";
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
@@ -76,6 +77,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
   const [recipientEmail, setRecipientEmail] = useState("");
   const [ai, setAi] = useState<AiAnalysis | null>(null);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiProvider, setAiProvider] = useState<"openai" | "heuristic">("heuristic");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [placingType, setPlacingType] = useState<DraftFieldType | null>(null);
@@ -102,7 +104,10 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
         setEnvelope(draft);
         setFields(draft.fields || []);
         api<AiStatus>("/ai/status")
-          .then((s) => setAiEnabled(s.enabled))
+          .then((s) => {
+            setAiEnabled(s.enabled);
+            setAiProvider(s.provider || "heuristic");
+          })
           .catch(() => setAiEnabled(false));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load draft");
@@ -462,9 +467,9 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
               Analyze
             </button>
           </div>
-          {!aiEnabled ? (
-            <p className="mb-2 text-xs text-amber-700">AI is disabled. Set `OPENAI_API_KEY` on the API server.</p>
-          ) : null}
+          <p className="mb-2 text-xs text-slate-600">
+            Provider: {aiProvider === "openai" ? "OpenAI" : "Built-in heuristic (no API key required)"}
+          </p>
           {ai ? (
             <div className="space-y-2 text-xs text-slate-700">
               <p className="rounded-md bg-slate-100 p-2">{ai.summary}</p>
