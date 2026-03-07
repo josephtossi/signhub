@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
 type SessionUser = {
@@ -43,12 +43,9 @@ function isPublicRoute(pathname: string) {
 }
 
 function Initials({ user }: { user: SessionUser | null }) {
-  const initials = useMemo(() => {
-    if (!user) return "U";
-    const first = user.firstName?.[0] || "";
-    const last = user.lastName?.[0] || "";
-    return (first + last || user.email[0] || "U").toUpperCase();
-  }, [user]);
+  const first = user?.firstName?.[0] || "";
+  const last = user?.lastName?.[0] || "";
+  const initials = (first + last || user?.email?.[0] || "U").toUpperCase();
 
   return (
     <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-xs font-semibold text-cyan-900">

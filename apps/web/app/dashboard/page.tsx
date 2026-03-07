@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 type DashboardData = {
@@ -50,11 +50,9 @@ export default function DashboardPage() {
     router.push("/login");
   }
 
-  const total = useMemo(() => {
-    if (!data) return 0;
-    const c = data.counts;
-    return c.needsMySignature + c.waitingForOthers + c.completed + c.drafts;
-  }, [data]);
+  const total = data
+    ? data.counts.needsMySignature + data.counts.waitingForOthers + data.counts.completed + data.counts.drafts
+    : 0;
 
   if (!data) return <p className="text-sm text-slate-500">Loading dashboard...</p>;
 

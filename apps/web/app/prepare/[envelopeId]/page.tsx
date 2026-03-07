@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL, api } from "@/lib/api";
 import { DraftField, DraftFieldType, PdfPrepareCanvas } from "@/components/pdf-prepare-canvas";
@@ -118,15 +118,8 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
     load();
   }, [envelopeId, isUuid]);
 
-  const fileUrl = useMemo(() => {
-    if (!envelope) return "";
-    return `${API_BASE}/documents/${envelope.documentId}/versions/latest/file`;
-  }, [envelope]);
-
-  const selectedField = useMemo(
-    () => fields.find((f) => f.id === selectedFieldId) || null,
-    [fields, selectedFieldId]
-  );
+  const fileUrl = envelope ? `${API_BASE}/documents/${envelope.documentId}/versions/latest/file` : "";
+  const selectedField = fields.find((f) => f.id === selectedFieldId) || null;
 
   async function saveRecipients(nextRecipients: Recipient[]) {
     if (!envelope) return;
