@@ -72,6 +72,12 @@ export class DocumentsService {
   }
 
   async getById(userId: string, documentId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true }
+    });
+    if (!user) throw new NotFoundException("User not found");
+
     const document = await this.prisma.document.findFirst({
       where: {
         id: documentId,
@@ -82,6 +88,17 @@ export class DocumentsService {
               users: {
                 some: {
                   userId
+                }
+              }
+            }
+          },
+          {
+            envelopes: {
+              some: {
+                recipients: {
+                  some: {
+                    email: user.email
+                  }
                 }
               }
             }

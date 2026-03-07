@@ -50,6 +50,11 @@ export class EnvelopesController {
     return this.envelopesService.getById(userId, id);
   }
 
+  @Get(":id/my-signing-link")
+  mySigningLink(@CurrentUser("sub") userId: string, @Param("id") id: string) {
+    return this.envelopesService.getMySigningLink(userId, id);
+  }
+
   @Get(":id/download")
   async download(@CurrentUser("sub") userId: string, @Param("id") id: string, @Res({ passthrough: true }) res: Response) {
     const result = await this.envelopesService.downloadLatest(userId, id);

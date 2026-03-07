@@ -25,6 +25,7 @@ export function EnvelopeTrackingPage({ envelopeId }: { envelopeId: string }) {
   const [error, setError] = useState("");
   const [envelope, setEnvelope] = useState<Envelope | null>(null);
   const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null);
+  const [mySigningUrl, setMySigningUrl] = useState<string | null>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(envelopeId);
@@ -46,8 +47,18 @@ export function EnvelopeTrackingPage({ envelopeId }: { envelopeId: string }) {
         ]);
         if (cancelled) return;
         setEnvelope({ ...full, status: status.status || full.status });
-        const doc = await api<DocumentMeta>(`/documents/${full.documentId}`);
-        if (!cancelled) setDocumentMeta(doc);
+        try {
+          const mine = await api<{ canSign: boolean; signingUrl?: string }>("/envelopes/" + envelopeId + "/my-signing-link");
+          if (!cancelled) setMySigningUrl(mine.canSign ? mine.signingUrl || null : null);
+        } catch {
+          if (!cancelled) setMySigningUrl(null);
+        }
+        try {
+          const doc = await api<DocumentMeta>(`/documents/${full.documentId}`);
+          if (!cancelled) setDocumentMeta(doc);
+        } catch {
+          if (!cancelled) setDocumentMeta(null);
+        }
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : "Failed to load envelope";
@@ -115,6 +126,14 @@ export function EnvelopeTrackingPage({ envelopeId }: { envelopeId: string }) {
               <Link href={`/envelopes/${envelope.id}/prepare`} className="rounded-md border border-white/30 px-3 py-1.5 text-sm">
                 Edit Draft
               </Link>
+            ) : null}
+            {mySigningUrl ? (
+              <a
+                href={mySigningUrl}
+                className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
+              >
+                Sign Now
+              </a>
             ) : null}
             <a
               href={`${apiBase}/envelopes/${envelope.id}/download`}

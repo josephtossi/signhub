@@ -157,7 +157,7 @@ export class EnvelopesService {
         template: "sign-request",
         data: {
           recipientName: recipient.fullName,
-          signingLink: `${process.env.SIGN_URL_BASE || "http://localhost:3000/sign"}/${recipient.accessToken}`
+          signingLink: `${process.env.SIGN_URL_BASE || "http://localhost:3001/sign"}/${recipient.accessToken}`
         }
       });
     }
@@ -249,6 +249,27 @@ export class EnvelopesService {
     return this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
   }
 
+  async getMySigningLink(userId: string, envelopeId: string) {
+    const email = await this.resolveUserEmail(userId);
+    const envelope = await this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
+    const recipient = envelope.recipients.find(
+      (r) =>
+        r.email.toLowerCase() === email.toLowerCase() &&
+        r.role === "SIGNER" &&
+        r.status !== "SIGNED" &&
+        Boolean(r.accessToken)
+    );
+    if (!recipient) {
+      return { canSign: false, reason: "No pending signature assigned to this user." };
+    }
+    const signBase = process.env.SIGN_URL_BASE || "http://localhost:3001/sign";
+    return {
+      canSign: true,
+      recipientId: recipient.id,
+      signingUrl: `${signBase}/${recipient.accessToken}`
+    };
+  }
+
   async downloadLatest(userId: string, envelopeId: string) {
     const envelope = await this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
     const latestVersion = envelope.document.versions[0];
@@ -257,7 +278,9 @@ export class EnvelopesService {
 
     const pdfDoc = await PDFDocument.load(source.body);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const signaturesByField = new Map(envelope.signatures.map((s) => [s.fieldId, s]));
+    const recipientsById = new Map(envelope.recipients.map((r) => [r.id, r]));
 
     for (const field of envelope.fields) {
       const pageIndex = Math.max(0, field.page - 1);
@@ -289,6 +312,15 @@ export class EnvelopesService {
             color: rgb(0.25, 0.25, 0.25)
           });
         } else {
+          const assignee = field.recipientId ? recipientsById.get(field.recipientId) : null;
+          const fullName = assignee?.fullName || "Signer";
+          const initials = fullName
+            .split(" ")
+            .map((x) => x.trim()[0])
+            .filter(Boolean)
+            .join("")
+            .slice(0, 3)
+            .toUpperCase();
           page.drawRectangle({
             x,
             y,
@@ -297,10 +329,17 @@ export class EnvelopesService {
             borderColor: rgb(0.4, 0.4, 0.4),
             borderWidth: 1
           });
-          page.drawText(field.label || field.type, {
+          page.drawText(field.type === "INITIAL" ? initials || "INIT" : fullName, {
             x: x + 2,
-            y: y + Math.max(2, h * 0.25),
-            size: 8,
+            y: y + Math.max(2, h * 0.4),
+            size: Math.max(8, Math.min(12, h * 0.5)),
+            font: boldFont,
+            color: rgb(0.2, 0.2, 0.2)
+          });
+          page.drawText(field.label || (field.type === "INITIAL" ? "Initial here" : "Sign here"), {
+            x: x + 2,
+            y: Math.max(0, y - 9),
+            size: 7,
             font,
             color: rgb(0.4, 0.4, 0.4)
           });
