@@ -15,8 +15,31 @@ export class DocumentsService {
       where: { userId },
       orderBy: { createdAt: "asc" }
     });
-    if (!membership) throw new NotFoundException("No organization found for user");
-    return membership.organizationId;
+    if (membership) return membership.organizationId;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, firstName: true, lastName: true, email: true }
+    });
+    if (!user) throw new NotFoundException("User not found");
+
+    const workspaceName =
+      `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+      `${user.email.split("@")[0]} Workspace`;
+
+    const created = await this.prisma.organization.create({
+      data: {
+        name: workspaceName,
+        users: {
+          create: {
+            userId: user.id,
+            role: "OWNER"
+          }
+        }
+      },
+      select: { id: true }
+    });
+    return created.id;
   }
 
   async create(ownerUserId: string, title: string) {
