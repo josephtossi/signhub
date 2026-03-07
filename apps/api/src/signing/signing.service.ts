@@ -18,6 +18,61 @@ export class SigningService {
     private readonly notifications: NotificationsService
   ) {}
 
+  private async ensureUserSignatureTable() {
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "UserSignature" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "userId" TEXT NOT NULL,
+        "image" TEXT NOT NULL,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "UserSignature_userId_createdAt_idx" ON "UserSignature"("userId","createdAt")`
+    );
+  }
+
+  private async ensureSignatureUserReferenceColumn() {
+    try {
+      await this.prisma.$executeRawUnsafe(`ALTER TABLE "Signature" ADD COLUMN "userSignatureId" TEXT`);
+    } catch {
+      // Column already exists in existing databases.
+    }
+  }
+
+  private async upsertUserDefaultSignature(userId: string, imageBase64: string) {
+    await this.ensureUserSignatureTable();
+    const now = new Date().toISOString();
+    const existing = await this.prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT "id" FROM "UserSignature"
+       WHERE "userId" = ?
+       ORDER BY "updatedAt" DESC, "createdAt" DESC
+       LIMIT 1`,
+      userId
+    );
+    if (existing[0]?.id) {
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE "UserSignature" SET "image" = ?, "updatedAt" = ? WHERE "id" = ?`,
+        imageBase64,
+        now,
+        existing[0].id
+      );
+      return existing[0].id;
+    }
+    const id = randomUUID();
+    await this.prisma.$executeRawUnsafe(
+      `INSERT INTO "UserSignature" ("id","userId","image","createdAt","updatedAt")
+       VALUES (?, ?, ?, ?, ?)`,
+      id,
+      userId,
+      imageBase64,
+      now,
+      now
+    );
+    return id;
+  }
+
   async getSession(token: string) {
     const recipient = await this.prisma.recipient.findFirst({
       where: { accessToken: token },
@@ -94,6 +149,15 @@ export class SigningService {
       if (!dto.imageBase64) {
         throw new NotFoundException("Signature image is required for signature fields");
       }
+      const signerUser = await this.prisma.user.findUnique({
+        where: { email: recipient.email.toLowerCase() },
+        select: { id: true }
+      });
+      let linkedUserSignatureId = dto.userSignatureId || null;
+      if (dto.saveAsDefault && signerUser?.id) {
+        linkedUserSignatureId = await this.upsertUserDefaultSignature(signerUser.id, dto.imageBase64);
+      }
+
       const key = `signatures/${recipient.envelopeId}/${randomUUID()}.png`;
       const image = Buffer.from(dto.imageBase64.split(",").pop() || "", "base64");
       await this.s3.upload(key, image, "image/png");
@@ -102,7 +166,7 @@ export class SigningService {
         where: { envelopeId: recipient.envelopeId, recipientId: recipient.id, fieldId: field.id }
       });
 
-      await this.prisma.signature.create({
+      const createdSignature = await this.prisma.signature.create({
         data: {
           envelopeId: recipient.envelopeId,
           recipientId: recipient.id,
@@ -113,6 +177,14 @@ export class SigningService {
           userAgent: meta.userAgent
         }
       });
+      if (linkedUserSignatureId) {
+        await this.ensureSignatureUserReferenceColumn();
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE "Signature" SET "userSignatureId" = ? WHERE "id" = ?`,
+          linkedUserSignatureId,
+          createdSignature.id
+        );
+      }
 
       await this.prisma.field.update({
         where: { id: field.id },

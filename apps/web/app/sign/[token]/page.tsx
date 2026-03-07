@@ -24,12 +24,19 @@ type Session = {
   }>;
 };
 
+type SavedSignature = {
+  id: string;
+  image: string;
+};
+
 export default function SignPage({ params }: { params: { token: string } }) {
   const token = params?.token || "";
   const [session, setSession] = useState<Session | null>(null);
-  const [signatureMode, setSignatureMode] = useState<"DRAW" | "TYPE" | "UPLOAD">("DRAW");
+  const [signatureMode, setSignatureMode] = useState<"DRAW" | "TYPE" | "UPLOAD" | "SAVED">("DRAW");
   const [typedSignature, setTypedSignature] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
+  const [savedSignature, setSavedSignature] = useState<SavedSignature | null>(null);
+  const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [checkboxValues, setCheckboxValues] = useState<Record<string, boolean>>({});
@@ -62,6 +69,19 @@ export default function SignPage({ params }: { params: { token: string } }) {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load signing session"));
   }, [token]);
+
+  useEffect(() => {
+    api<SavedSignature | null>("/users/signature")
+      .then((data) => {
+        if (data?.image) {
+          setSavedSignature(data);
+          setSignatureMode("SAVED");
+        }
+      })
+      .catch(() => {
+        // Signing links can be used without an authenticated session.
+      });
+  }, []);
 
   function buildTypedSignatureImage(text: string) {
     const canvas = document.createElement("canvas");
@@ -101,7 +121,12 @@ export default function SignPage({ params }: { params: { token: string } }) {
       for (const field of session.fields || []) {
         if (field.type === "SIGNATURE" || field.type === "INITIAL") {
           let image = signature || "";
-          if (signatureMode === "TYPE") {
+          let userSignatureId: string | undefined;
+          if (signatureMode === "SAVED") {
+            if (!savedSignature?.image) throw new Error("No saved signature found.");
+            image = savedSignature.image;
+            userSignatureId = savedSignature.id;
+          } else if (signatureMode === "TYPE") {
             if (!typedSignature.trim()) throw new Error("Enter your typed signature.");
             image = buildTypedSignatureImage(typedSignature.trim());
           }
@@ -110,9 +135,11 @@ export default function SignPage({ params }: { params: { token: string } }) {
             method: "POST",
             body: JSON.stringify({
               fieldId: field.id,
-              signatureType: signatureMode,
+              signatureType: signatureMode === "SAVED" ? "DRAW" : signatureMode,
               imageBase64: image,
-              typedSignature: typedSignature || undefined
+              typedSignature: typedSignature || undefined,
+              userSignatureId,
+              saveAsDefault: signatureMode === "SAVED" ? false : saveAsDefault
             })
           });
           continue;
@@ -161,8 +188,11 @@ export default function SignPage({ params }: { params: { token: string } }) {
   }
 
   const requiredFields = (session?.fields || []).filter((f) => f.required);
+  const currentSignaturePreview =
+    signatureMode === "SAVED" ? savedSignature?.image || null : signatureMode === "TYPE" ? (typedSignature.trim() ? buildTypedSignatureImage(typedSignature.trim()) : null) : signature;
   const completedRequiredCount = requiredFields.filter((field) => {
     if (field.type === "SIGNATURE" || field.type === "INITIAL") {
+      if (signatureMode === "SAVED") return Boolean(savedSignature?.image);
       return Boolean(signature) || (signatureMode === "TYPE" && typedSignature.trim().length > 0);
     }
     if (field.type === "CHECKBOX") return Boolean(checkboxValues[field.id]);
@@ -247,17 +277,29 @@ export default function SignPage({ params }: { params: { token: string } }) {
           <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
             <p className="text-sm font-medium">Signature Method</p>
             <div className="mt-2 flex gap-2 text-sm">
-              {(["DRAW", "TYPE", "UPLOAD"] as const).map((mode) => (
+              {(["SAVED", "DRAW", "TYPE", "UPLOAD"] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   className={`rounded-md border px-3 py-1.5 ${signatureMode === mode ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-300"}`}
+                  disabled={mode === "SAVED" && !savedSignature}
                   onClick={() => setSignatureMode(mode)}
                 >
                   {mode}
                 </button>
               ))}
             </div>
+
+            {signatureMode === "SAVED" ? (
+              <div className="mt-3 rounded-md border border-slate-200 p-3">
+                {savedSignature?.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={savedSignature.image} alt="Saved signature" className="h-20 w-auto rounded border border-slate-200 bg-white p-1" />
+                ) : (
+                  <p className="text-sm text-slate-500">No saved signature available for this account.</p>
+                )}
+              </div>
+            ) : null}
 
             {signatureMode === "DRAW" ? <div className="mt-3"><SignaturePad onSave={setSignature} /></div> : null}
             {signatureMode === "TYPE" ? (
@@ -279,6 +321,21 @@ export default function SignPage({ params }: { params: { token: string } }) {
                   }}
                 />
                 {uploading ? <p className="text-xs text-slate-500">Uploading signature image...</p> : null}
+              </div>
+            ) : null}
+
+            {signatureMode !== "SAVED" ? (
+              <label className="mt-3 inline-flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={saveAsDefault} onChange={(e) => setSaveAsDefault(e.target.checked)} />
+                Save this as my default signature
+              </label>
+            ) : null}
+
+            {currentSignaturePreview ? (
+              <div className="mt-3 rounded-md border border-slate-200 p-3">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Preview</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={currentSignaturePreview} alt="Signature preview" className="h-20 w-auto rounded border border-slate-200 bg-white p-1" />
               </div>
             ) : null}
           </div>

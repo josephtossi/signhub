@@ -20,6 +20,7 @@ model User {
   memberships      OrganizationUser[]
   ownedDocuments   Document[]
   auditLogs        AuditLog[]
+  userSignatures   UserSignature[]
 }
 
 model Organization {
@@ -141,6 +142,7 @@ model Signature {
   envelopeId    String
   recipientId   String
   fieldId       String
+  userSignatureId String?
   signatureType String
   storageKey    String
   signedAt      DateTime  @default(now())
@@ -149,6 +151,7 @@ model Signature {
   envelope      Envelope  @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
   recipient     Recipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   field         Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  userSignature UserSignature? @relation(fields: [userSignatureId], references: [id], onDelete: SetNull)
 }
 
 model AuditLog {
@@ -180,3 +183,14 @@ model Template {
   sourceDocument   Document     @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade)
 }
 
+model UserSignature {
+  id        String   @id @default(uuid())
+  userId    String
+  image     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  signatures Signature[]
+
+  @@index([userId, createdAt])
+}

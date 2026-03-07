@@ -24,10 +24,19 @@ export class SubmitSignatureDto {
 
   @IsOptional()
   @IsString()
+  userSignatureId?: string;
+
+  @IsOptional()
+  @IsString()
   value?: string;
 
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
   checked?: boolean;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  saveAsDefault?: boolean;
 }
