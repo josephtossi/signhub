@@ -48,16 +48,17 @@ export class AuthController {
 
   private attachCookies(res: Response, accessToken: string, refreshToken: string) {
     const secure = process.env.NODE_ENV === "production";
+    const sameSite = secure ? ("none" as const) : ("lax" as const);
     res.cookie("access_token", accessToken, {
       httpOnly: true,
       secure,
-      sameSite: "lax",
+      sameSite,
       maxAge: 1000 * 60 * 15
     });
     res.cookie("refresh_token", refreshToken, {
       httpOnly: true,
       secure,
-      sameSite: "lax",
+      sameSite,
       maxAge: 1000 * 60 * 60 * 24 * 7
     });
   }
