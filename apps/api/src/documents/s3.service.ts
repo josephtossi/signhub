@@ -18,7 +18,7 @@ export class S3Service {
       localStorageRaw === "1" ||
       localStorageRaw === "yes" ||
       (!localStorageRaw && this.config.get("NODE_ENV", "development") !== "production");
-    this.localBaseDir = join(process.cwd(), ".local-storage");
+    this.localBaseDir = this.config.get("LOCAL_STORAGE_PATH", join(process.cwd(), ".local-storage"));
     this.bucket = this.config.get("S3_BUCKET", "signhub");
     this.client = new S3Client({
       region: this.config.get("AWS_REGION", "us-east-1"),
