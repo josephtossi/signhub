@@ -26,25 +26,27 @@ export default function DraftsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-xl bg-gradient-to-r from-slate-900 to-cyan-900 p-6 text-white">
-        <h1 className="text-2xl font-semibold">Draft Envelopes</h1>
-        <p className="mt-1 text-slate-200">Open a draft to continue placing fields and send when ready.</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-slate-900 to-cyan-900 p-6 text-white">
+          <h1 className="page-title text-white">Draft Envelopes</h1>
+          <p className="page-subtitle text-slate-200">Open a draft to continue placing fields and send when ready.</p>
+        </div>
       </section>
 
-      <section className="glass rounded-xl border border-white/70 p-4">
+      <section className="surface p-4">
         {drafts.length === 0 ? (
-          <p className="text-sm text-slate-500">No draft envelopes found.</p>
+          <div className="surface-soft p-6 text-sm text-slate-600">No draft envelopes found.</div>
         ) : (
           <div className="space-y-3">
             {drafts.map((draft) => (
               <Link
                 key={draft.id}
                 href={`/envelopes/${draft.id}/prepare`}
-                className="block rounded-lg border border-slate-200 bg-white p-4 transition hover:border-cyan-300 hover:shadow-sm"
+                className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-cyan-300 hover:shadow-md"
               >
                 <div className="flex items-center justify-between">
                   <p className="font-medium">{draft.document?.title || "Untitled draft"}</p>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-xs">{draft.status}</span>
+                  <span className={`status-${String(draft.status).toLowerCase()}`}>{draft.status}</span>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
                   {draft.recipients.length} recipients, {draft.fields.length} fields, updated{" "}
@@ -53,7 +55,7 @@ export default function DraftsPage() {
                 <div className="mt-2">
                   <button
                     type="button"
-                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium"
+                    className="btn-secondary px-2 py-1 text-xs"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();

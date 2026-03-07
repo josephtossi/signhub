@@ -29,19 +29,21 @@ export default function SentPage() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-xl bg-gradient-to-r from-indigo-900 to-slate-900 p-6 text-white">
-        <h1 className="text-2xl font-semibold">Sent Envelopes</h1>
-        <p className="mt-1 text-slate-200">Waiting for recipients to complete signatures.</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-6 text-white">
+          <h1 className="page-title text-white">Sent Envelopes</h1>
+          <p className="page-subtitle text-slate-200">Waiting for recipients to complete signatures.</p>
+        </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <section className="surface p-4">
         {envelopes.length === 0 ? <p className="text-sm text-slate-500">No sent envelopes.</p> : null}
-        <div className="space-y-2">
+        <div className="space-y-3">
           {envelopes.map((env) => (
-            <Link key={env.id} href={`/envelopes/${env.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
+            <Link key={env.id} href={`/envelopes/${env.id}/tracking`} className="block rounded-xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-slate-50">
               <div className="flex items-center justify-between">
                 <p className="font-medium">{env.document?.title || "Untitled"}</p>
-                <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">{env.status}</span>
+                <span className={`status-${String(env.status).toLowerCase()}`}>{env.status}</span>
               </div>
               <p className="text-xs text-slate-500">Updated {new Date(env.updatedAt).toLocaleString()}</p>
             </Link>

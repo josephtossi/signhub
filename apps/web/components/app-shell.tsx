@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -16,25 +16,26 @@ type SessionUser = {
 type NavItem = {
   href: string;
   label: string;
+  icon: string;
 };
 
 const TOP_NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/documents", label: "Documents" },
-  { href: "/drafts", label: "Drafts" },
-  { href: "/sent", label: "Sent" },
-  { href: "/completed", label: "Completed" },
-  { href: "/ai-insights", label: "AI Insights" }
+  { href: "/dashboard", label: "Dashboard", icon: "DB" },
+  { href: "/documents", label: "Documents", icon: "DC" },
+  { href: "/drafts", label: "Drafts", icon: "DR" },
+  { href: "/sent", label: "Sent", icon: "SE" },
+  { href: "/completed", label: "Completed", icon: "OK" },
+  { href: "/ai-insights", label: "AI Insights", icon: "AI" }
 ];
 
 const SIDE_NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/documents", label: "Documents" },
-  { href: "/drafts", label: "Drafts" },
-  { href: "/sent", label: "Sent" },
-  { href: "/completed", label: "Completed" },
-  { href: "/ai-insights", label: "AI Assistant" },
-  { href: "/settings", label: "Settings" }
+  { href: "/dashboard", label: "Dashboard", icon: "DB" },
+  { href: "/documents", label: "Documents", icon: "DC" },
+  { href: "/drafts", label: "Drafts", icon: "DR" },
+  { href: "/sent", label: "Sent", icon: "SE" },
+  { href: "/completed", label: "Completed", icon: "OK" },
+  { href: "/ai-insights", label: "AI Assistant", icon: "AI" },
+  { href: "/settings", label: "Settings", icon: "ST" }
 ];
 
 function isPublicRoute(pathname: string) {
@@ -50,7 +51,7 @@ function Initials({ user }: { user: SessionUser | null }) {
   }, [user]);
 
   return (
-    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-xs font-semibold text-cyan-900">
+    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-200 bg-cyan-50 text-xs font-semibold text-cyan-900">
       {initials}
     </span>
   );
@@ -68,6 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const routeLoadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const publicRoute = isPublicRoute(pathname);
+  const authRoute = pathname === "/login" || pathname === "/signup";
 
   useEffect(() => {
     if (publicRoute) {
@@ -130,7 +132,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (publicRoute) {
-    return <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>;
+    if (authRoute) {
+      return (
+        <main className="mx-auto grid min-h-screen w-full max-w-7xl place-items-center px-4 py-8 sm:px-6 lg:px-8">
+          {children}
+        </main>
+      );
+    }
+    return <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{children}</main>;
   }
 
   if (authLoading) {
@@ -144,26 +153,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen fade-in">
       {routeLoading ? (
-        <div className="fixed inset-x-0 top-0 z-[100] h-1 bg-gradient-to-r from-cyan-500 via-indigo-500 to-cyan-500 animate-pulse" />
+        <div className="fixed inset-x-0 top-0 z-[100] h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500 animate-pulse" />
       ) : null}
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <button
               type="button"
-              className="inline-flex rounded-md border border-slate-300 px-2 py-1 text-sm lg:hidden"
+              className="btn-secondary px-3 py-1.5 text-xs lg:hidden"
               onClick={() => setMobileOpen((v) => !v)}
               aria-label="Toggle navigation"
             >
               Menu
             </button>
             <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-indigo-700 text-sm font-bold text-white">
-                S
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 text-sm font-bold text-white shadow-sm">
+                SH
               </span>
               <span className="text-lg font-semibold tracking-tight text-slate-900">SignHub</span>
+              <span className="ai-chip hidden sm:inline-flex">AI</span>
             </Link>
             <nav className="ml-4 hidden items-center gap-1 lg:flex">
               {TOP_NAV.map((item) => {
@@ -173,10 +183,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     href={item.href}
                     className={`rounded-md px-3 py-2 text-sm transition ${
-                      active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                      active ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    {item.label}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="text-[10px] opacity-80">{item.icon}</span>
+                      {item.label}
+                    </span>
                   </Link>
                 );
               })}
@@ -186,14 +199,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="relative">
             <button
               type="button"
-              className="flex items-center gap-2 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm shadow-sm transition hover:bg-slate-50"
               onClick={() => setMenuOpen((v) => !v)}
             >
               <Initials user={user} />
               <span className="hidden sm:inline">{user?.email}</span>
             </button>
             {menuOpen ? (
-              <div className="absolute right-0 mt-2 w-48 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+              <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
                 <Link className="block rounded px-3 py-2 text-sm hover:bg-slate-100" href="/account" onClick={() => setMenuOpen(false)}>
                   Account
                 </Link>
@@ -215,21 +228,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="mx-auto grid max-w-[1440px] grid-cols-1 gap-0 lg:grid-cols-[240px,1fr]">
         <aside
-          className={`border-r border-slate-200 bg-white px-3 py-4 lg:block ${mobileOpen ? "block" : "hidden"}`}
+          className={`border-r border-slate-200/70 bg-white/85 px-3 py-4 backdrop-blur xl:px-4 lg:block ${mobileOpen ? "block" : "hidden"}`}
         >
-          <nav className="space-y-1">
+          <nav className="space-y-1.5">
             {SIDE_NAV.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`block rounded-md px-3 py-2 text-sm transition ${
-                    active ? "bg-cyan-50 font-medium text-cyan-900" : "text-slate-600 hover:bg-slate-100"
+                  className={`group block rounded-lg px-3 py-2.5 text-sm transition ${
+                    active ? "bg-blue-50 font-medium text-blue-800 shadow-sm ring-1 ring-blue-100" : "text-slate-600 hover:bg-slate-100"
                   }`}
                   onClick={() => setMobileOpen(false)}
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`text-[10px] ${active ? "text-blue-700" : "text-slate-400 group-hover:text-slate-600"}`}>{item.icon}</span>
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}

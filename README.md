@@ -14,8 +14,9 @@ SignHub is an electronic signature SaaS (DocuSign-style) built as a monorepo.
 - Envelope tracking (status + recipient progress)
 - Download latest merged PDF (with fields/signatures)
 - AI contract assistant:
-  - Works with OpenAI when `OPENAI_API_KEY` is set
-  - Falls back to built-in heuristic mode when key is missing
+  - OpenAI provider when `OPENAI_API_KEY` is configured
+  - Ollama local provider by default when OpenAI is not configured
+  - Heuristic fallback only when both OpenAI and Ollama are unavailable
 - Saved user signatures:
   - Draw/type/upload signature
   - Save default signature and reuse in future documents
@@ -62,6 +63,12 @@ LOCAL_FILE_STORAGE=true
 
 NEXT_PUBLIC_API_URL=http://localhost:4000/v1
 WEB_APP_URL=http://localhost:3001
+
+AI_PROVIDER=auto
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
 ```
 
 ### 3) Initialize Prisma DB
@@ -184,11 +191,152 @@ If a recipient already signed, signing endpoints block re-sign attempts.
 - Download latest merged PDF from prepare/tracking/completed areas.
 - Final PDF includes all signed field overlays + completion certificate page.
 
+## Demo (End-to-End Test Script)
+
+Use this section to validate the full multi-recipient signing lifecycle exactly like a business demo.
+
+### Demo goal
+
+Verify that:
+- both signers can sign once
+- envelope becomes `COMPLETED` only after the second signer finishes
+- downloaded PDF contains both signatures and all filled fields
+
+### Test accounts
+
+Create two users:
+- `sender@example.com` (sender + signer #1)
+- `recipient@example.com` (signer #2)
+
+### 1) Login as sender and upload contract
+
+1. Open `http://localhost:3001/login`
+2. Login as `sender@example.com`
+3. Go to `/upload`
+4. Upload a PDF and create document
+5. Create/open draft in `/prepare/:envelopeId`
+
+Expected:
+- Draft opens with PDF preview
+- No blank page
+
+### 2) Add recipients and assign fields (critical)
+
+In prepare page:
+1. Add both recipients (sender + recipient)
+2. Add at least:
+- 1 signature field for sender
+- 1 signature field for recipient
+- 1 date field
+- 1 text field
+- 1 checkbox field
+3. Click each field and set **Assigned recipient** in Field Inspector
+
+Important rules:
+- For multi-signer envelopes, do not leave signature/initial fields unassigned
+- Each signer must have at least one assigned signature/initial field
+
+4. Click `Save Draft`
+5. Click `Send Envelope`
+
+Expected:
+- Envelope status becomes `SENT`
+- No validation errors if assignments are correct
+
+### 3) First signer flow (sender)
+
+1. Open sender signing link (from UI "Needs My Signature" or sign link)
+2. Complete assigned fields
+3. Submit and complete signing
+
+Expected:
+- Sender signs successfully
+- Envelope status becomes `PARTIALLY_SIGNED`
+- Sender cannot sign again (should return conflict for re-sign)
+- Downloaded PDF may show sender signature only at this stage
+
+### 4) Second signer flow (recipient)
+
+1. Login as `recipient@example.com`
+2. Open dashboard
+3. Check `Needs My Signature`
+4. Open signing page and sign assigned fields
+5. Submit and complete signing
+
+Expected:
+- Recipient can sign (no false 409)
+- Envelope transitions to `COMPLETED`
+- Final merged PDF is generated
+
+### 5) Verify final PDF output
+
+From tracking page (`/envelopes/:id/tracking`) click `Download PDF`.
+
+Expected final PDF:
+- original document preserved
+- sender signature in sender field
+- recipient signature in recipient field
+- date/text/checkbox values rendered
+- completion certificate page appended
+
+### 6) Negative checks (must fail safely)
+
+1. Try signing again with same signer link after completion  
+Expected: blocked with conflict (`already signed`)
+
+2. Try sending multi-signer envelope with unassigned signature fields  
+Expected: blocked with clear validation message
+
+3. Open invalid envelope id in prepare/tracking  
+Expected: friendly error, no blank page
+
+### Troubleshooting checklist
+
+If behavior looks stale:
+1. Rebuild API: `corepack pnpm --filter @signhub/api build`
+2. Restart API process on port `4000`
+3. Hard refresh browser
+4. Test using a **new** envelope (old envelopes may have invalid legacy field assignments)
+
 ## AI assistant behavior
 
-- `GET /v1/ai/status` returns provider mode.
-- Without `OPENAI_API_KEY`, AI remains usable via built-in heuristic mode.
-- With key configured, responses use OpenAI models.
+Provider selection logic:
+1. Use OpenAI if `OPENAI_API_KEY` is set.
+2. Otherwise use Ollama if `OLLAMA_URL` is reachable.
+3. Otherwise use heuristic fallback.
+
+`GET /v1/ai/status` now returns:
+
+```json
+{
+  "enabled": true,
+  "provider": "openai | ollama | heuristic",
+  "model": "gpt-4o-mini | llama3 | heuristic"
+}
+```
+
+Ollama quick start (local, no API key):
+
+```bash
+# Install Ollama from https://ollama.com/download
+ollama serve
+ollama pull llama3
+ollama run llama3 "hello"
+```
+
+Then keep:
+
+```env
+AI_PROVIDER=auto
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+OPENAI_API_KEY=
+```
+
+Long documents are handled with chunking:
+- contract text is split into chunks
+- each chunk is summarized
+- summaries are merged and analyzed into final structured output
 
 ## Quick manual test (PowerShell)
 

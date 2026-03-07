@@ -39,7 +39,7 @@ type AiAnalysis = {
 
 type AiStatus = {
   enabled: boolean;
-  provider?: "openai" | "heuristic";
+  provider?: "openai" | "ollama" | "heuristic";
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
@@ -77,7 +77,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
   const [recipientEmail, setRecipientEmail] = useState("");
   const [ai, setAi] = useState<AiAnalysis | null>(null);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiProvider, setAiProvider] = useState<"openai" | "heuristic">("heuristic");
+  const [aiProvider, setAiProvider] = useState<"openai" | "ollama" | "heuristic">("heuristic");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [placingType, setPlacingType] = useState<DraftFieldType | null>(null);
@@ -287,10 +287,10 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
 
   return (
     <div className="grid gap-5 lg:grid-cols-[290px,1fr,320px]">
-      <section className="glass rounded-xl border border-white/70 p-4">
+      <section className="surface p-4">
         <h2 className="text-lg font-semibold">Prepare Envelope</h2>
         <p className="mt-1 text-sm text-slate-500">{envelope.document?.title || "Untitled document"}</p>
-        <p className="mt-1 text-xs text-slate-400">Status: {envelope.status}</p>
+        <p className="mt-1 text-xs text-slate-400">Status: <span className={`status-${String(envelope.status).toLowerCase()}`}>{envelope.status}</span></p>
 
         <div className="mt-4 grid gap-2">
           {FIELD_TYPES.map((type) => (
@@ -300,7 +300,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
               draggable
               onDragStart={(e) => e.dataTransfer.setData("application/x-field-type", type)}
               onClick={() => setPlacingType(type)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-medium transition hover:border-cyan-400 hover:bg-cyan-50"
+              className="btn-secondary justify-start px-3 py-2 text-left text-sm font-medium hover:border-cyan-400 hover:bg-cyan-50"
             >
               {placingType === type ? `Tap on PDF to place ${fieldLabel(type)}` : `Drag or Tap ${fieldLabel(type)}`}
             </button>
@@ -323,7 +323,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
               <button
                 key={r.id}
                 type="button"
-                className="block w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-left text-xs"
+                className="block w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-left text-xs shadow-sm"
               >
                 <div className="font-medium">{r.fullName}</div>
                 <div className="text-slate-500">{r.email}</div>
@@ -333,26 +333,26 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
           </div>
           <button
             type="button"
-            className="mt-2 w-full rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700"
+            className="btn-secondary mt-2 w-full border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700"
             onClick={addMeAsRecipient}
           >
             Add Myself as Signer
           </button>
           <input
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="input mt-2"
             placeholder="Recipient name"
             value={recipientName}
             onChange={(e) => setRecipientName(e.target.value)}
           />
           <input
-            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="input mt-2"
             placeholder="Recipient email"
             value={recipientEmail}
             onChange={(e) => setRecipientEmail(e.target.value)}
           />
           <button
             type="button"
-            className="mt-2 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+            className="btn-primary mt-2 w-full bg-slate-900"
             onClick={addRecipient}
           >
             Add Recipient
@@ -364,13 +364,13 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             href={`${API_BASE}/envelopes/${envelope.id}/download`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700"
+            className="btn-secondary text-center"
           >
             Download Latest PDF
           </a>
           <button
             type="button"
-            className="rounded-md bg-cyan-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="btn-primary bg-cyan-600 disabled:opacity-60"
             onClick={saveDraft}
             disabled={saving}
           >
@@ -378,7 +378,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
           </button>
           <button
             type="button"
-            className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="btn-primary bg-emerald-600 disabled:opacity-60"
             onClick={sendEnvelope}
             disabled={sending || envelope.recipients.length === 0}
           >
@@ -387,7 +387,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
         </div>
       </section>
 
-      <section className="glass rounded-xl border border-white/70 p-4">
+      <section className="surface p-4">
         {fileUrl ? (
           <PdfPrepareCanvas
             fileUrl={fileUrl}
@@ -407,17 +407,17 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
         )}
       </section>
 
-      <aside className="glass rounded-xl border border-white/70 p-4">
+      <aside className="surface p-4">
         <h3 className="text-lg font-semibold">Field Inspector</h3>
         {!selectedField ? (
           <p className="mt-2 text-sm text-slate-500">Select a field on the PDF canvas to edit it.</p>
         ) : (
           <div className="mt-3 space-y-2 text-sm">
-            <p className="rounded-md bg-cyan-50 px-2 py-1 text-cyan-700">{fieldLabel(selectedField.type)}</p>
+            <p className="rounded-full bg-cyan-50 px-2 py-1 text-cyan-700">{fieldLabel(selectedField.type)}</p>
             <label className="block">
               <span className="mb-1 block text-xs text-slate-500">Label</span>
               <input
-                className="w-full rounded-md border border-slate-300 px-2 py-2"
+                className="input"
                 value={selectedField.label || ""}
                 onChange={(e) => updateSelected({ label: e.target.value })}
               />
@@ -425,7 +425,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             <label className="block">
               <span className="mb-1 block text-xs text-slate-500">Assigned recipient</span>
               <select
-                className="w-full rounded-md border border-slate-300 px-2 py-2"
+                className="input"
                 value={selectedField.recipientId || ""}
                 onChange={(e) => updateSelected({ recipientId: e.target.value || undefined })}
               >
@@ -447,7 +447,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             </label>
             <button
               type="button"
-              className="w-full rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white"
+              className="btn-primary w-full bg-red-600"
               onClick={deleteSelectedField}
             >
               Remove Field
@@ -460,7 +460,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             <h4 className="text-sm font-semibold">AI Insights</h4>
             <button
               type="button"
-              className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white"
+              className="btn-primary px-2.5 py-1 text-xs"
               onClick={analyzeContract}
               disabled={!aiEnabled}
             >
@@ -468,7 +468,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
             </button>
           </div>
           <p className="mb-2 text-xs text-slate-600">
-            Provider: {aiProvider === "openai" ? "OpenAI" : "Built-in heuristic (no API key required)"}
+            Provider: {aiProvider === "openai" ? "OpenAI" : aiProvider === "ollama" ? "Ollama (local)" : "Built-in heuristic"}
           </p>
           {ai ? (
             <div className="space-y-2 text-xs text-slate-700">
@@ -491,7 +491,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
                       <button
                         key={`${clause.type}-${clause.text.slice(0, 30)}`}
                         type="button"
-                        className="block text-left text-indigo-700 underline"
+                        className="block text-left text-indigo-700 underline-offset-2 hover:underline"
                         onClick={() => explainClause(clause.text)}
                       >
                         {clause.type}: {clause.text.slice(0, 80)}
@@ -507,14 +507,14 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
 
           <div className="mt-3 space-y-2">
             <input
-              className="w-full rounded-md border border-slate-300 px-2 py-2 text-xs"
+              className="input text-xs"
               placeholder="Ask about this contract..."
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
             />
             <button
               type="button"
-              className="w-full rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white"
+              className="btn-secondary w-full bg-slate-900 text-xs font-medium text-white"
               onClick={askAi}
             >
               Ask AI

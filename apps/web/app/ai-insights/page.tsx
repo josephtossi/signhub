@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
-type AiStatus = { enabled: boolean; provider?: "openai" | "heuristic" };
+type AiStatus = { enabled: boolean; provider?: "openai" | "ollama" | "heuristic"; model?: string };
 
 type Membership = { organizationId: string };
 type MeResponse = { memberships: Membership[] };
@@ -19,7 +19,8 @@ type AiAnalysis = {
 
 export default function AiInsightsPage() {
   const [enabled, setEnabled] = useState(false);
-  const [provider, setProvider] = useState<"openai" | "heuristic">("heuristic");
+  const [provider, setProvider] = useState<"openai" | "ollama" | "heuristic">("heuristic");
+  const [model, setModel] = useState("heuristic");
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentId, setDocumentId] = useState("");
   const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
@@ -34,6 +35,7 @@ export default function AiInsightsPage() {
         const [status, me] = await Promise.all([api<AiStatus>("/ai/status"), api<MeResponse>("/auth/me")]);
         setEnabled(status.enabled);
         setProvider(status.provider || "heuristic");
+        setModel(status.model || "heuristic");
         const orgId = me.memberships?.[0]?.organizationId;
         if (!orgId) return;
         const docs = await api<DocumentItem[]>(`/documents?organizationId=${encodeURIComponent(orgId)}`);
@@ -79,19 +81,31 @@ export default function AiInsightsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-xl bg-gradient-to-r from-slate-900 to-violet-900 p-6 text-white">
-        <h1 className="text-2xl font-semibold">AI Smart Contract Assistant</h1>
-        <p className="mt-1 text-slate-200">Summaries, clause extraction, risk checks, and contract Q&A.</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-slate-900 to-violet-900 p-6 text-white">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="ai-chip mb-3 border-violet-300/40 bg-violet-300/10 text-violet-100">AI Assistant</p>
+              <h1 className="page-title text-white">Smart Contract Insights</h1>
+              <p className="page-subtitle text-slate-200">Summaries, clause extraction, risk checks, and contract Q&A.</p>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-800">
-        AI provider: <span className="font-semibold">{provider === "openai" ? "OpenAI" : "Built-in heuristic (no API key required)"}</span>
+      <section className="surface-soft p-4 text-sm text-slate-700">
+        <span className="font-medium">AI provider:</span>{" "}
+        <span className="font-semibold">
+          {provider === "openai" ? "OpenAI" : provider === "ollama" ? "Ollama (local)" : "Built-in heuristic"}
+        </span>
+        {" · "}
+        <span className="font-medium">Model:</span> <span className="font-semibold">{model}</span>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <section className="surface p-4">
         <div className="grid gap-2 sm:grid-cols-[1fr,auto]">
           <select
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="input"
             value={documentId}
             onChange={(e) => setDocumentId(e.target.value)}
           >
@@ -104,7 +118,7 @@ export default function AiInsightsPage() {
           </select>
           <button
             type="button"
-            className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="btn-primary disabled:opacity-60"
             onClick={analyze}
             disabled={!documentId || loading || !enabled}
           >
@@ -114,15 +128,15 @@ export default function AiInsightsPage() {
 
         {analysis ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-md bg-slate-50 p-3">
+            <div className="surface-soft p-3">
               <p className="text-sm font-semibold">Summary</p>
               <p className="mt-1 text-sm text-slate-700">{analysis.summary}</p>
             </div>
-            <div className="rounded-md bg-slate-50 p-3">
+            <div className="surface-soft p-3">
               <p className="text-sm font-semibold">Detected Parties</p>
               <p className="mt-1 text-sm text-slate-700">{analysis.parties.join(", ") || "None detected"}</p>
             </div>
-            <div className="rounded-md bg-slate-50 p-3">
+            <div className="surface-soft p-3">
               <p className="text-sm font-semibold">Key Clauses</p>
               <ul className="mt-1 list-disc pl-5 text-sm text-slate-700">
                 {analysis.clauses.map((c, i) => (
@@ -132,7 +146,7 @@ export default function AiInsightsPage() {
                 ))}
               </ul>
             </div>
-            <div className="rounded-md bg-slate-50 p-3">
+            <div className="surface-soft p-3">
               <p className="text-sm font-semibold">Risk Warnings</p>
               <ul className="mt-1 list-disc pl-5 text-sm text-slate-700">
                 {analysis.risks.map((risk) => (
@@ -145,14 +159,14 @@ export default function AiInsightsPage() {
 
         <div className="mt-4 grid gap-2 sm:grid-cols-[1fr,auto]">
           <input
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="input"
             placeholder="Ask a question about the contract..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
           />
           <button
             type="button"
-            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="btn-secondary bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             onClick={ask}
             disabled={!documentId || !question.trim() || !enabled}
           >

@@ -33,20 +33,20 @@ export default function SignupPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <div className="glass rounded-2xl border border-white/60 p-8 shadow-xl">
+      <div className="surface p-8 shadow-xl">
         <h1 className="text-2xl font-semibold">Create account</h1>
         <p className="mt-1 text-sm text-slate-500">Start sending agreements for signature.</p>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <input
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="input"
               placeholder="First name"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               required
             />
             <input
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="input"
               placeholder="Last name"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
@@ -54,7 +54,7 @@ export default function SignupPage() {
             />
           </div>
           <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input"
             placeholder="Email"
             type="email"
             value={email}
@@ -62,7 +62,7 @@ export default function SignupPage() {
             required
           />
           <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input"
             placeholder="Password"
             type="password"
             value={password}
@@ -70,7 +70,7 @@ export default function SignupPage() {
             required
           />
           <button
-            className="w-full rounded-lg bg-gradient-to-r from-cyan-500 to-blue-700 px-4 py-2 font-medium text-white"
+            className="btn-primary w-full"
             disabled={loading}
           >
             {loading ? "Creating..." : "Create account"}
@@ -87,4 +87,3 @@ export default function SignupPage() {
     </div>
   );
 }
-

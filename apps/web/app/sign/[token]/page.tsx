@@ -209,9 +209,10 @@ export default function SignPage({ params }: { params: { token: string } }) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <section className="rounded-xl bg-gradient-to-r from-indigo-900 to-slate-900 p-6 text-white">
-        <h1 className="text-2xl font-semibold">Secure Signing Session</h1>
-        <p className="text-slate-200">{session ? `Signer: ${session.fullName}` : "Loading signer details..."}</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-indigo-900 to-slate-900 p-6 text-white">
+        <h1 className="page-title text-white">Secure Signing Session</h1>
+        <p className="page-subtitle text-slate-200">{session ? `Signer: ${session.fullName}` : "Loading signer details..."}</p>
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between text-xs text-slate-200">
             <span>Required fields completed</span>
@@ -221,9 +222,10 @@ export default function SignPage({ params }: { params: { token: string } }) {
             <div className="h-2 rounded-full bg-emerald-400 transition-all" style={{ width: `${completionPercent}%` }} />
           </div>
         </div>
+        </div>
       </section>
       <div className="grid gap-5 lg:grid-cols-[1.2fr,1fr]">
-        <section className="rounded-xl border border-slate-200 bg-white p-3">
+        <section className="surface p-3">
           <div className="mb-2 text-sm font-medium text-slate-700">{session?.document?.title || "Document Preview"}</div>
           {token ? (
             <PdfSignCanvas
@@ -239,19 +241,19 @@ export default function SignPage({ params }: { params: { token: string } }) {
           {pdfError ? <p className="mt-2 text-xs text-red-600">PDF preview error: {pdfError}</p> : null}
         </section>
 
-        <section className="glass rounded-xl border border-white/70 p-6">
+        <section className="surface p-6">
           <h2 className="text-lg font-semibold">Complete Required Fields</h2>
           <p className="mt-1 text-sm text-slate-500">Required fields are marked with *</p>
 
           <div className="mt-4 space-y-3">
             {(session?.fields || []).map((field) => (
-              <div key={field.id} className="rounded-md border border-slate-200 bg-white p-3">
+              <div key={field.id} className="rounded-xl border border-slate-200 bg-white p-3">
                 <p className="mb-2 text-sm font-medium">
                   {field.label || field.type} {field.required ? "*" : ""}
                 </p>
                 {field.type === "TEXT" ? (
                   <input
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    className="input"
                     value={fieldValues[field.id] || ""}
                     onChange={(e) => setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                     placeholder="Enter text"
@@ -260,7 +262,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
                 {field.type === "DATE" ? (
                   <input
                     type="date"
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    className="input"
                     value={fieldValues[field.id] || ""}
                     onChange={(e) => setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                   />
@@ -279,7 +281,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
             ))}
           </div>
 
-          <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-sm font-medium">Signature Method</p>
             <div className="mt-2 flex gap-2 text-sm">
               {(["SAVED", "DRAW", "TYPE", "UPLOAD"] as const).map((mode) => (
@@ -309,7 +311,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
             {signatureMode === "DRAW" ? <div className="mt-3"><SignaturePad onSave={setSignature} /></div> : null}
             {signatureMode === "TYPE" ? (
               <input
-                className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="input mt-3"
                 placeholder="Type your signature"
                 value={typedSignature}
                 onChange={(e) => setTypedSignature(e.target.value)}
@@ -346,7 +348,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
           </div>
 
           <button
-            className="mt-4 rounded-md bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-60"
+            className="btn-primary mt-4 bg-emerald-600 disabled:opacity-60"
             onClick={submit}
             disabled={submitting || session?.status === "SIGNED"}
           >

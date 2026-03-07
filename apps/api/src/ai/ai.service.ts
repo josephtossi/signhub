@@ -1,88 +1,68 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import pdfParse from "pdf-parse";
-import OpenAI from "openai";
 import { DocumentsService } from "../documents/documents.service";
-
-type AnalysisResult = {
-  summary: string;
-  clauses: { type: string; text: string }[];
-  risks: string[];
-  suggestedFields: { type: string; page: number; label: string }[];
-  parties: string[];
-};
+import { AIProvider, AiAnalysisResult } from "../services/ai/providers/ai-provider.interface";
+import { HeuristicProvider } from "../services/ai/providers/heuristic.provider";
+import { OllamaProvider } from "../services/ai/providers/ollama.provider";
+import { OpenAIProvider } from "../services/ai/providers/openai.provider";
 
 @Injectable()
 export class AiService {
-  private readonly openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+  private readonly logger = new Logger(AiService.name);
   private readonly docTextCache = new Map<string, string>();
+  private readonly heuristicProvider = new HeuristicProvider();
+  private readonly openAiProvider = process.env.OPENAI_API_KEY ? new OpenAIProvider(process.env.OPENAI_API_KEY) : null;
+  private readonly ollamaProvider = new OllamaProvider();
 
   constructor(private readonly documentsService: DocumentsService) {}
 
-  status() {
-    return { enabled: true, provider: this.openai ? "openai" : "heuristic" };
+  async status() {
+    const provider = await this.resolveProvider();
+    return { enabled: true, provider: provider.provider, model: provider.model };
   }
 
-  async analyzeDocument(documentId: string): Promise<AnalysisResult> {
+  async analyzeDocument(documentId: string): Promise<AiAnalysisResult> {
     const text = await this.getDocumentText(documentId);
-
-    if (this.openai) {
-      const prompt = [
-        "Analyze the contract and return JSON with keys:",
-        "summary, clauses (payment,termination,renewal,liability), risks, suggestedFields, parties.",
-        "Keep results concise and practical."
-      ].join(" ");
-      const completion = await this.openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompt },
-          { role: "user", content: text.slice(0, 12000) }
-        ]
-      });
-      const parsed = JSON.parse(completion.choices[0]?.message?.content || "{}");
-      return {
-        summary: parsed.summary || "No summary generated.",
-        clauses: parsed.clauses || [],
-        risks: parsed.risks || [],
-        suggestedFields: parsed.suggestedFields || [{ type: "SIGNATURE", page: 1, label: "Signature" }],
-        parties: parsed.parties || []
-      };
+    const provider = await this.resolveProvider();
+    const condensed = await this.prepareLargeDocumentContext(text, provider);
+    try {
+      const primary = await provider.analyzeDocument(condensed);
+      return await this.enrichAnalysis(primary, condensed);
+    } catch (error) {
+      this.logger.warn(`Provider ${provider.provider} analyze failed, falling back to heuristic: ${(error as Error).message}`);
+      const fallbackContext = condensed.slice(0, 18000);
+      return this.heuristicProvider.analyzeDocument(fallbackContext);
     }
-
-    return this.heuristicAnalysis(text);
   }
 
   async chat(documentId: string, question: string) {
     const text = await this.getDocumentText(documentId);
-    if (!this.openai) {
-      return { answer: this.heuristicAnswer(text, question) };
+    const provider = await this.resolveProvider();
+    const condensed = await this.prepareLargeDocumentContext(text, provider);
+    const prompt = [
+      "You are a contract assistant. Answer only from the provided contract text.",
+      "If the answer is uncertain, state that clearly.",
+      `Contract text:\n${condensed}`,
+      `Question: ${question}`
+    ].join("\n\n");
+    try {
+      const answer = await provider.generateText(prompt);
+      return { answer: answer || "No answer generated." };
+    } catch (error) {
+      this.logger.warn(`Provider ${provider.provider} chat failed, using heuristic: ${(error as Error).message}`);
+      return { answer: this.heuristicAnswer(condensed, question) };
     }
-
-    const completion = await this.openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: "You are a contract assistant. Answer only from the provided contract text." },
-        { role: "user", content: `Contract text:\n${text.slice(0, 12000)}\n\nQuestion: ${question}` }
-      ]
-    });
-    return { answer: completion.choices[0]?.message?.content || "No answer generated." };
   }
 
   async explainClause(clause: string) {
-    if (!this.openai) {
+    const provider = await this.resolveProvider();
+    try {
+      const explanation = await provider.explainClause("", clause);
+      return { explanation: explanation || clause };
+    } catch (error) {
+      this.logger.warn(`Provider ${provider.provider} explain failed, using heuristic: ${(error as Error).message}`);
       return { explanation: `Plain-language explanation: ${clause}` };
     }
-    const completion = await this.openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: "Explain legal text in plain business language." },
-        { role: "user", content: clause }
-      ]
-    });
-    return { explanation: completion.choices[0]?.message?.content || clause };
   }
 
   private async getDocumentText(documentId: string) {
@@ -95,28 +75,6 @@ export class AiService {
     const text = parsed.text || "";
     this.docTextCache.set(documentId, text);
     return text;
-  }
-
-  private heuristicAnalysis(text: string): AnalysisResult {
-    const lower = text.toLowerCase();
-    const clauses: { type: string; text: string }[] = [];
-    if (lower.includes("payment")) clauses.push({ type: "payment", text: "Payment-related terms detected." });
-    if (lower.includes("termination")) clauses.push({ type: "termination", text: "Termination terms detected." });
-    if (lower.includes("renewal")) clauses.push({ type: "renewal", text: "Renewal terms detected." });
-    if (lower.includes("liability")) clauses.push({ type: "liability", text: "Liability terms detected." });
-
-    const parties = Array.from(new Set((text.match(/[A-Z][A-Za-z0-9&., ]+(LLC|Inc|Ltd|Corporation)/g) || []).slice(0, 6)));
-    const risks = [];
-    if (!lower.includes("termination")) risks.push("No explicit termination clause detected.");
-    if (!lower.includes("liability")) risks.push("Liability language may be missing.");
-
-    return {
-      summary: text.slice(0, 600).trim() || "No text extracted.",
-      clauses,
-      risks,
-      suggestedFields: [{ type: "SIGNATURE", page: 1, label: "Signature" }],
-      parties
-    };
   }
 
   private heuristicAnswer(text: string, question: string) {
@@ -140,5 +98,78 @@ export class AiService {
       return "No direct matching clause found. Try asking about payment, termination, renewal, or liability.";
     }
     return top.join(" ");
+  }
+
+  private splitText(text: string, size = 12000) {
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += size) {
+      chunks.push(text.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  private async prepareLargeDocumentContext(text: string, provider: AIProvider) {
+    const maxInput = 18000;
+    if (text.length <= maxInput) return text;
+
+    const chunks = this.splitText(text, 10000);
+    const chunkSummaries: string[] = [];
+    for (let i = 0; i < chunks.length; i += 1) {
+      const prompt = [
+        `You are summarizing chunk ${i + 1} of ${chunks.length} from a legal contract.`,
+        "Capture: parties, obligations, dates, money terms, liabilities, termination, renewals, and signature requirements.",
+        "Keep output concise and factual.",
+        chunks[i]
+      ].join("\n\n");
+      try {
+        const summary = await provider.generateText(prompt);
+        chunkSummaries.push(summary || chunks[i].slice(0, 800));
+      } catch {
+        chunkSummaries.push(chunks[i].slice(0, 800));
+      }
+    }
+
+    const combined = chunkSummaries.join("\n\n");
+    if (combined.length <= maxInput) return combined;
+    return combined.slice(0, maxInput);
+  }
+
+  private async resolveProvider(): Promise<AIProvider> {
+    const forced = (process.env.AI_PROVIDER || "auto").trim().toLowerCase();
+
+    if (forced === "openai" && this.openAiProvider) return this.openAiProvider;
+    if (forced === "ollama") {
+      if (await this.isOllamaReachable()) return this.ollamaProvider;
+      return this.heuristicProvider;
+    }
+    if (forced === "heuristic") return this.heuristicProvider;
+
+    if (this.openAiProvider) return this.openAiProvider;
+    if (await this.isOllamaReachable()) return this.ollamaProvider;
+    return this.heuristicProvider;
+  }
+
+  private async enrichAnalysis(primary: AiAnalysisResult, text: string): Promise<AiAnalysisResult> {
+    const fallback = await this.heuristicProvider.analyzeDocument(text);
+    const clauses = primary.clauses?.length ? primary.clauses : fallback.clauses;
+    const risks = primary.risks?.length ? primary.risks : fallback.risks;
+    const parties = primary.parties?.length ? primary.parties : fallback.parties;
+    const suggestedFields = primary.suggestedFields?.length ? primary.suggestedFields : fallback.suggestedFields;
+    const summary = primary.summary?.trim() ? primary.summary : fallback.summary;
+    return { summary, clauses, risks, parties, suggestedFields };
+  }
+
+  private async isOllamaReachable() {
+    const base = (process.env.OLLAMA_URL || "http://localhost:11434").replace(/\/+$/, "");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    try {
+      const response = await fetch(`${base}/api/tags`, { signal: controller.signal });
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

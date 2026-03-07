@@ -22,6 +22,11 @@ export class SigningService {
     return (role || "").trim().toUpperCase() !== "CC";
   }
 
+  private isSignatureFieldType(type: string | null | undefined) {
+    const t = (type || "").trim().toUpperCase();
+    return t === "SIGNATURE" || t === "INITIAL";
+  }
+
   private async ensureUserSignatureTable() {
     await this.prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "UserSignature" (
@@ -102,11 +107,14 @@ export class SigningService {
       });
     }
     const signerCount = recipient.envelope.recipients.filter((r) => this.isSignerRole(r.role)).length;
-    const includeUnassigned = signerCount <= 1;
+    const allowUnassignedSignatureFields = signerCount <= 1;
     const actionableFields = await this.prisma.field.findMany({
       where: {
         envelopeId: recipient.envelopeId,
-        OR: includeUnassigned ? [{ recipientId: recipient.id }, { recipientId: null }] : [{ recipientId: recipient.id }]
+        OR: [
+          { recipientId: recipient.id },
+          ...(allowUnassignedSignatureFields ? [{ recipientId: null }] : [{ recipientId: null, NOT: { type: { in: ["SIGNATURE", "INITIAL"] } } }])
+        ]
       },
       orderBy: { createdAt: "asc" }
     });
@@ -148,19 +156,22 @@ export class SigningService {
     }
     const allRecipients = await this.prisma.recipient.findMany({ where: { envelopeId: recipient.envelopeId } });
     const signerCount = allRecipients.filter((r) => this.isSignerRole(r.role)).length;
-    const includeUnassigned = signerCount <= 1;
+    const allowUnassignedSignatureFields = signerCount <= 1;
 
     let field = await this.prisma.field.findFirst({
       where: {
         id: dto.fieldId,
         envelopeId: recipient.envelopeId,
-        OR: includeUnassigned ? [{ recipientId: recipient.id }, { recipientId: null }] : [{ recipientId: recipient.id }]
+        OR: [
+          { recipientId: recipient.id },
+          ...(allowUnassignedSignatureFields ? [{ recipientId: null }] : [{ recipientId: null, NOT: { type: { in: ["SIGNATURE", "INITIAL"] } } }])
+        ]
       }
     });
     if (!field) throw new NotFoundException("Field not found for signer");
 
-    if (!field.recipientId) {
-      if (!includeUnassigned) {
+    if (!field.recipientId && this.isSignatureFieldType(field.type)) {
+      if (!allowUnassignedSignatureFields) {
         throw new ConflictException("This field must be assigned to a recipient before signing.");
       }
       const claimed = await this.prisma.field.updateMany({
@@ -306,9 +317,13 @@ export class SigningService {
       if (!recipient) throw new NotFoundException("Recipient not found");
       if (!envelope) throw new NotFoundException("Envelope not found");
 
-      const includeUnassigned = signerRecipients.length <= 1;
+      const signerRecipients = recipients.filter((r) => this.isSignerRole(r.role));
+      const allowUnassignedSignatureFields = signerRecipients.length <= 1;
       const assignedToRecipient = fields.filter(
-        (f) => f.recipientId === recipientId || (includeUnassigned && f.recipientId === null)
+        (f) =>
+          f.recipientId === recipientId ||
+          (f.recipientId === null &&
+            (!this.isSignatureFieldType(f.type) || allowUnassignedSignatureFields))
       );
       const required = assignedToRecipient.filter((f) => f.required);
       const isFieldCompleted = (field: (typeof fields)[number]) => {
@@ -320,7 +335,6 @@ export class SigningService {
       };
 
       const allRequiredDone = required.every((f) => isFieldCompleted(f));
-      const signerRecipients = recipients.filter((r) => this.isSignerRole(r.role));
 
       const requiredSignerIds = signerRecipients.map((r) => r.id);
 

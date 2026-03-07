@@ -31,16 +31,18 @@ export default function CompletedPage() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 p-6 text-white">
-        <h1 className="text-2xl font-semibold">Completed Envelopes</h1>
-        <p className="mt-1 text-emerald-100">Download final signed documents and verify completion history.</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-emerald-700 to-teal-700 p-6 text-white">
+          <h1 className="page-title text-white">Completed Envelopes</h1>
+          <p className="page-subtitle text-emerald-100">Download final signed documents and verify completion history.</p>
+        </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <section className="surface p-4">
         {envelopes.length === 0 ? <p className="text-sm text-slate-500">No completed envelopes yet.</p> : null}
-        <div className="space-y-2">
+        <div className="space-y-3">
           {envelopes.map((env) => (
-            <div key={env.id} className="rounded-md border border-slate-200 p-3">
+            <div key={env.id} className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <Link href={`/envelopes/${env.id}/tracking`} className="font-medium hover:underline">
@@ -52,7 +54,7 @@ export default function CompletedPage() {
                 </div>
                 <a
                   href={`${API_BASE}/envelopes/${env.id}/download`}
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
+                  className="btn-secondary px-3 py-1.5 text-xs"
                   target="_blank"
                   rel="noreferrer"
                 >

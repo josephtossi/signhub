@@ -60,15 +60,38 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-900 to-cyan-800 p-7 text-white">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold">Agreement Command Center</h1>
-            <p className="mt-2 text-slate-200">Live envelope intelligence and execution status.</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-900 to-blue-800 p-7 text-white">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="ai-chip mb-3 border-white/20 bg-white/10 text-indigo-100">Control Center</p>
+              <h1 className="text-3xl font-semibold tracking-tight">Agreement Command Center</h1>
+              <p className="mt-2 text-slate-200">Live envelope intelligence and execution status.</p>
+            </div>
+            <button className="btn-secondary border-white/30 bg-white/10 text-white hover:bg-white/20" onClick={logout}>
+              Logout
+            </button>
           </div>
-          <button className="rounded-lg border border-white/30 px-4 py-2 text-sm" onClick={logout}>
-            Logout
-          </button>
+        </div>
+        <div className="flex items-start justify-between">
+          <div className="grid w-full grid-cols-2 gap-3 px-6 py-4 text-sm md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
+              <p className="text-xs text-slate-500">In Focus</p>
+              <p className="mt-0.5 text-xl font-semibold">{data.counts.needsMySignature}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
+              <p className="text-xs text-slate-500">Active Pipelines</p>
+              <p className="mt-0.5 text-xl font-semibold">{data.counts.waitingForOthers}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
+              <p className="text-xs text-slate-500">Completed</p>
+              <p className="mt-0.5 text-xl font-semibold">{data.counts.completed}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-700">
+              <p className="text-xs text-slate-500">Draft Queue</p>
+              <p className="mt-0.5 text-xl font-semibold">{data.counts.drafts}</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -88,19 +111,19 @@ export default function DashboardPage() {
             key={String(label)}
             href={String(href)}
             onClick={() => console.info("[dashboard] navigate", label, href)}
-            className="glass rounded-xl border border-white/70 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="kpi-card"
           >
             <div className={`mb-3 h-1.5 rounded-full bg-gradient-to-r ${gradient}`} />
             <p className="text-sm text-slate-500">{label}</p>
-            <p className="mt-1 text-3xl font-semibold">{value}</p>
+            <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
           </Link>
         ))}
       </section>
 
-      <section className="glass rounded-xl border border-white/70 p-5">
+      <section className="surface p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent Envelopes</h2>
-          <Link href="/upload" className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white">
+          <Link href="/upload" className="btn-primary">
             New Envelope
           </Link>
         </div>
@@ -110,13 +133,13 @@ export default function DashboardPage() {
               href={item.status === "DRAFT" ? `/envelopes/${item.id}/prepare` : `/envelopes/${item.id}/tracking`}
               key={item.id}
               onClick={() => console.info("[dashboard] open envelope", item.id)}
-              className="flex items-center justify-between rounded-lg border border-slate-200 bg-white/70 p-3 transition hover:bg-white"
+              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:shadow-sm"
             >
               <div>
                 <p className="font-medium">{item.document?.title || "Untitled"}</p>
                 <p className="text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()}</p>
               </div>
-              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{item.status}</span>
+              <span className={`status-${String(item.status).toLowerCase()}`}>{item.status}</span>
             </Link>
           ))}
           {data.recent.length === 0 ? <p className="text-sm text-slate-500">No envelopes yet.</p> : null}

@@ -52,30 +52,44 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-xl bg-gradient-to-r from-slate-900 to-cyan-900 p-6 text-white">
-        <h1 className="text-2xl font-semibold">Documents</h1>
-        <p className="mt-1 text-slate-200">Manage your uploaded files and continue workflows.</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-slate-900 to-blue-900 p-6 text-white">
+          <h1 className="page-title text-white">Documents</h1>
+          <p className="page-subtitle text-slate-200">Manage your uploaded files and continue workflows.</p>
+        </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <section className="surface p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">All Documents</h2>
-          <Link href="/upload" className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white">
+          <Link href="/upload" className="btn-primary">
             Upload New
           </Link>
         </div>
 
         {documents.length === 0 ? <p className="text-sm text-slate-500">No documents yet.</p> : null}
-        <div className="space-y-2">
-          {documents.map((doc) => (
-            <div key={doc.id} className="rounded-md border border-slate-200 p-3">
-              <p className="font-medium">{doc.title}</p>
-              <p className="text-xs text-slate-500">
-                Versions: {doc.versions.length} | Created: {new Date(doc.createdAt).toLocaleString()}
-              </p>
-            </div>
-          ))}
-        </div>
+        {documents.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Versions</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documents.map((doc) => (
+                  <tr key={doc.id}>
+                    <td className="font-medium text-slate-900">{doc.title}</td>
+                    <td>{doc.versions.length}</td>
+                    <td>{new Date(doc.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       </section>
     </div>

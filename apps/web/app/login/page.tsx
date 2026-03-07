@@ -31,12 +31,12 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto max-w-md">
-      <div className="glass rounded-2xl border border-white/60 p-8 shadow-xl">
+      <div className="surface p-8 shadow-xl">
         <h1 className="text-2xl font-semibold">Welcome back</h1>
         <p className="mt-1 text-sm text-slate-500">Sign in to manage agreements and signatures.</p>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input"
             placeholder="Email"
             type="email"
             value={email}
@@ -44,7 +44,7 @@ export default function LoginPage() {
             required
           />
           <input
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="input"
             placeholder="Password"
             type="password"
             value={password}
@@ -52,7 +52,7 @@ export default function LoginPage() {
             required
           />
           <button
-            className="w-full rounded-lg bg-gradient-to-r from-sky-500 to-indigo-600 px-4 py-2 font-medium text-white"
+            className="btn-primary w-full"
             disabled={loading}
           >
             {loading ? "Signing in..." : "Sign in"}
@@ -69,4 +69,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

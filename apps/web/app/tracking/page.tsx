@@ -66,9 +66,11 @@ export default function TrackingIndexPage() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-xl bg-gradient-to-r from-slate-900 to-indigo-900 p-6 text-white">
-        <h1 className="text-2xl font-semibold">Envelope Tracking</h1>
-        <p className="mt-1 text-slate-200">Monitor incoming signatures, sent envelopes, and completed agreements.</p>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-900 p-6 text-white">
+          <h1 className="page-title text-white">Envelope Tracking</h1>
+          <p className="page-subtitle text-slate-200">Monitor incoming signatures, sent envelopes, and completed agreements.</p>
+        </div>
       </section>
 
       {invalidParamError ? (
@@ -84,10 +86,10 @@ export default function TrackingIndexPage() {
       ) : null}
 
       {!hasAny ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+        <section className="surface p-6 text-sm text-slate-600">
           No envelopes are available yet. Upload a document to start a new signature workflow.
           <div className="mt-3">
-            <Link href="/upload" className="rounded-md bg-indigo-600 px-3 py-2 text-white">
+            <Link href="/upload" className="btn-primary">
               Upload Document
             </Link>
           </div>
@@ -95,41 +97,56 @@ export default function TrackingIndexPage() {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <section className="surface p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Needs My Signature</h2>
           <div className="space-y-2">
-            {inbox.map((item) => (
-              <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
-                <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
-                <p className="text-xs text-slate-500">{item.status}</p>
-              </Link>
-            ))}
+            {inbox.map((item) => {
+              const statusClass = `status-${String(item.status).toLowerCase()}`;
+              return (
+                <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-slate-50">
+                  <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
+                  <div className="mt-1">
+                    <span className={statusClass}>{item.status}</span>
+                  </div>
+                </Link>
+              );
+            })}
             {inbox.length === 0 ? <p className="text-xs text-slate-500">No envelopes awaiting your signature.</p> : null}
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <section className="surface p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Waiting For Others</h2>
           <div className="space-y-2">
-            {sent.map((item) => (
-              <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
-                <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
-                <p className="text-xs text-slate-500">{item.status}</p>
-              </Link>
-            ))}
+            {sent.map((item) => {
+              const statusClass = `status-${String(item.status).toLowerCase()}`;
+              return (
+                <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-slate-50">
+                  <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
+                  <div className="mt-1">
+                    <span className={statusClass}>{item.status}</span>
+                  </div>
+                </Link>
+              );
+            })}
             {sent.length === 0 ? <p className="text-xs text-slate-500">No envelopes waiting on recipients.</p> : null}
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <section className="surface p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Completed</h2>
           <div className="space-y-2">
-            {completed.map((item) => (
-              <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
-                <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
-                <p className="text-xs text-slate-500">{item.status}</p>
-              </Link>
-            ))}
+            {completed.map((item) => {
+              const statusClass = `status-${String(item.status).toLowerCase()}`;
+              return (
+                <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-slate-50">
+                  <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
+                  <div className="mt-1">
+                    <span className={statusClass}>{item.status}</span>
+                  </div>
+                </Link>
+              );
+            })}
             {completed.length === 0 ? <p className="text-xs text-slate-500">No completed envelopes yet.</p> : null}
           </div>
         </section>

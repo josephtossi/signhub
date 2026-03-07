@@ -110,7 +110,8 @@ export function EnvelopeTrackingPage({ envelopeId }: { envelopeId: string }) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl bg-gradient-to-r from-slate-900 to-indigo-900 p-6 text-white">
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-900 p-6 text-white">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">{envelope.document?.title || "Envelope"}</h1>
@@ -123,21 +124,21 @@ export function EnvelopeTrackingPage({ envelopeId }: { envelopeId: string }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {isDraft ? (
-              <Link href={`/envelopes/${envelope.id}/prepare`} className="rounded-md border border-white/30 px-3 py-1.5 text-sm">
+              <Link href={`/envelopes/${envelope.id}/prepare`} className="btn-secondary border-white/30 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20">
                 Edit Draft
               </Link>
             ) : null}
             {mySigningUrl ? (
               <a
                 href={mySigningUrl}
-                className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
+                className="btn-primary bg-emerald-600 px-3 py-1.5 text-sm"
               >
                 Sign Now
               </a>
             ) : null}
             <a
               href={`${apiBase}/envelopes/${envelope.id}/download`}
-              className="rounded-md border border-white/30 px-3 py-1.5 text-sm"
+              className="btn-secondary border-white/30 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20"
               target="_blank"
               rel="noreferrer"
             >
@@ -157,29 +158,30 @@ export function EnvelopeTrackingPage({ envelopeId }: { envelopeId: string }) {
             <div className="h-2 rounded-full bg-emerald-400 transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
+        </div>
       </section>
 
-      <section className="glass rounded-xl border border-white/70 p-5">
+      <section className="surface p-5">
         <h2 className="mb-3 text-lg font-semibold">Recipients</h2>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
+          <table className="data-table">
+            <thead>
               <tr>
-                <th className="px-3 py-2 text-left font-medium text-slate-600">Name</th>
-                <th className="px-3 py-2 text-left font-medium text-slate-600">Email</th>
-                <th className="px-3 py-2 text-left font-medium text-slate-600">Status</th>
-                <th className="px-3 py-2 text-left font-medium text-slate-600">Signed At</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Signed At</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody>
               {envelope.recipients.map((r) => (
                 <tr key={r.id}>
-                  <td className="px-3 py-2 font-medium">{r.fullName}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.email}</td>
-                  <td className="px-3 py-2">
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">{r.status}</span>
+                  <td className="font-medium">{r.fullName}</td>
+                  <td>{r.email}</td>
+                  <td>
+                    <span className={`status-${String(r.status).toLowerCase()}`}>{r.status}</span>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{r.signedAt ? new Date(r.signedAt).toLocaleString() : "-"}</td>
+                  <td>{r.signedAt ? new Date(r.signedAt).toLocaleString() : "-"}</td>
                 </tr>
               ))}
             </tbody>

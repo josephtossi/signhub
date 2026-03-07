@@ -58,15 +58,17 @@ export default function UploadPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-slate-900 to-sky-900 p-6 text-white">
-        <h1 className="text-2xl font-semibold">Upload and Prepare</h1>
-        <p className="mt-1 text-slate-200">Upload a contract PDF to start a real signing workflow.</p>
-      </div>
+      <section className="surface overflow-hidden p-0">
+        <div className="bg-gradient-to-r from-slate-900 to-sky-900 p-6 text-white">
+          <h1 className="page-title text-white">Upload and Prepare</h1>
+          <p className="page-subtitle text-slate-200">Upload a contract PDF to start a real signing workflow.</p>
+        </div>
+      </section>
 
-      <div className="glass rounded-xl border border-white/70 p-6">
+      <div className="surface p-6">
         <label className="mb-2 block text-sm text-slate-600">Document title</label>
         <input
-          className="w-full rounded-lg border border-slate-300 px-3 py-2"
+          className="input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Service Agreement 2026"
@@ -76,7 +78,7 @@ export default function UploadPage() {
           <p className="text-sm text-slate-500">{file ? file.name : "Choose PDF file"}</p>
         </label>
         <button
-          className="mt-4 rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 px-4 py-2 font-medium text-white"
+          className="btn-primary mt-4"
           onClick={onSubmit}
           disabled={loading}
         >

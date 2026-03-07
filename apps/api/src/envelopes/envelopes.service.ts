@@ -155,6 +155,28 @@ export class EnvelopesService {
     if (draft.status === "COMPLETED") {
       throw new ForbiddenException("Completed envelopes cannot be sent");
     }
+    const signerCount = draft.recipients.filter((r) => this.isSignerRole(r.role)).length;
+    if (signerCount > 1) {
+      const unassignedSigningFields = draft.fields.filter(
+        (f) => (f.type === "SIGNATURE" || f.type === "INITIAL") && !f.recipientId
+      );
+      if (unassignedSigningFields.length > 0) {
+        throw new ForbiddenException(
+          "All signature/initial fields must be assigned to a recipient before sending multi-signer envelopes."
+        );
+      }
+      const signerIds = draft.recipients.filter((r) => this.isSignerRole(r.role)).map((r) => r.id);
+      const signFieldByRecipient = new Map<string, number>();
+      for (const field of draft.fields) {
+        if ((field.type === "SIGNATURE" || field.type === "INITIAL") && field.recipientId) {
+          signFieldByRecipient.set(field.recipientId, (signFieldByRecipient.get(field.recipientId) || 0) + 1);
+        }
+      }
+      const missingRecipients = signerIds.filter((id) => (signFieldByRecipient.get(id) || 0) === 0);
+      if (missingRecipients.length > 0) {
+        throw new ForbiddenException("Each signer must have at least one assigned signature or initials field before sending.");
+      }
+    }
 
     const envelope = await this.prisma.envelope.update({
       where: { id: draft.id },
