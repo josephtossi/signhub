@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../common/prisma.service";
 import { LoginDto } from "./dto/login.dto";
@@ -14,7 +14,7 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
-    if (existing) throw new UnauthorizedException("Email already exists");
+    if (existing) throw new ConflictException("Email already exists");
 
     const passwordHash = await hash(dto.password, 10);
     const user = await this.prisma.user.create({
