@@ -2,6 +2,18 @@
 
 SignHub is an electronic signature SaaS (DocuSign-style) built as a monorepo.
 
+## Reality check: local vs deployed storage
+
+If you deploy on Railway without persistent object storage (S3/R2 or a persistent disk), file-based features can fail after restart/redeploy:
+
+- PDF download
+- AI document analysis
+- signed document retrieval
+
+Why: database rows remain, but binary files on ephemeral container storage are lost.
+
+For a smooth, reliable experience, run locally (recommended for full testing) or configure persistent storage in deployment.
+
 ## What this app does
 
 - User authentication (signup/login/logout/session)
@@ -21,7 +33,7 @@ SignHub is an electronic signature SaaS (DocuSign-style) built as a monorepo.
   - Draw/type/upload signature
   - Save default signature and reuse in future documents
 
-## Run locally (no Docker)
+## Run locally (recommended, full features)
 
 This project can run fully without Docker using:
 - SQLite database
@@ -38,7 +50,7 @@ This project can run fully without Docker using:
 corepack pnpm install
 ```
 
-### 2) Configure env
+### 2) Configure env (root `.env`)
 
 Create `.env` in repo root:
 
@@ -60,6 +72,7 @@ AWS_SECRET_ACCESS_KEY=minio123
 S3_BUCKET=signhub
 S3_ENDPOINT=http://localhost:9000
 LOCAL_FILE_STORAGE=true
+LOCAL_STORAGE_PATH=.local-storage
 
 NEXT_PUBLIC_API_URL=http://localhost:4000/v1
 WEB_APP_URL=http://localhost:3001
@@ -97,13 +110,46 @@ corepack pnpm --filter @signhub/web dev
 Web URL:
 - `http://localhost:3001`
 
-If the web app fails with `localhost refused to connect` or repeated 500 errors on `_next/static/*`, run:
+### 6) Local sanity checks
+
+API health:
+- `http://localhost:4000` returns `{"service":"signhub-api","status":"ok","baseUrl":"/v1"}`
+
+Login page:
+- `http://localhost:3001/login`
+
+If web fails with `localhost refused to connect` or repeated 500 errors on `_next/static/*`, clear Next cache:
 
 ```bash
 # from apps/web
 Remove-Item -Recurse -Force .next
 corepack pnpm --filter @signhub/web dev
 ```
+
+If web says `EADDRINUSE: 3001`, free the port:
+
+```powershell
+netstat -ano | findstr :3001
+taskkill /PID <PID> /F
+```
+
+## Golden local flow (what to test)
+
+1. Signup on `/signup`
+2. Login on `/login`
+3. Upload PDF on `/upload`
+4. Prepare draft on `/prepare/:envelopeId`
+- add recipients
+- place signature/text/date/checkbox fields
+- assign fields to recipients
+5. Send envelope
+6. Open recipient link `/sign/:token`
+7. Submit signature
+8. Track status on `/tracking/:envelopeId`
+9. Download merged PDF with signatures/field values
+10. Open `/ai-insights` and analyze contract
+
+If any of these fail locally, restart API and web once, then test with a newly uploaded document.
 
 ## Core API routes (current)
 
@@ -297,6 +343,20 @@ If behavior looks stale:
 2. Restart API process on port `4000`
 3. Hard refresh browser
 4. Test using a **new** envelope (old envelopes may have invalid legacy field assignments)
+
+## Railway deployment note (important)
+
+SignHub can be deployed on Railway, but for file features to remain stable you need persistent storage.
+
+If you keep `LOCAL_FILE_STORAGE=true` on ephemeral container storage:
+- uploads may appear to work initially
+- later AI/download/sign-file retrieval can fail with binary-not-found errors
+
+Production-safe options:
+1. Use S3-compatible storage (AWS S3 / Cloudflare R2 / MinIO external) and set `LOCAL_FILE_STORAGE=false`
+2. Or mount a persistent disk/volume (if your Railway plan/service supports it) and set `LOCAL_STORAGE_PATH` there
+
+If you cannot configure persistent storage now, use Railway as a UI/demo environment and run full document workflows locally.
 
 ## AI assistant behavior
 
