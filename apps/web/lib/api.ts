@@ -1,4 +1,9 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
+const PROD_API_FALLBACK = "https://signhub-api-production.up.railway.app/v1";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname.endsWith(".railway.app")
+    ? PROD_API_FALLBACK
+    : "http://localhost:4000/v1");
 
 type ApiOptions = RequestInit & {
   skipJsonContentType?: boolean;

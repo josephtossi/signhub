@@ -5,7 +5,12 @@ import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const configuredOrigins = (process.env.CORS_ORIGIN || process.env.WEB_APP_URL || "http://localhost:3001")
+  const fallbackOrigins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://signhub-web-production.up.railway.app"
+  ];
+  const configuredOrigins = (process.env.CORS_ORIGIN || process.env.WEB_APP_URL || fallbackOrigins.join(","))
     .split(",")
     .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean);
