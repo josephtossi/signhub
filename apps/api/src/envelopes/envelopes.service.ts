@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { PrismaService } from "../common/prisma.service";
@@ -9,6 +9,8 @@ import { SaveFieldsDto } from "./dto/save-fields.dto";
 
 @Injectable()
 export class EnvelopesService {
+  private readonly logger = new Logger(EnvelopesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -272,11 +274,12 @@ export class EnvelopesService {
 
   async downloadLatest(userId: string, envelopeId: string) {
     const envelope = await this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
-    const latestVersion = envelope.document.versions[0];
-    if (!latestVersion) throw new NotFoundException("Source document version not found");
-    const source = await this.s3.getObject(latestVersion.storageKey);
+    const nonFinal = envelope.document.versions.find((v) => !v.storageKey.includes("/final-"));
+    const baseVersion = nonFinal || envelope.document.versions[0];
+    if (!baseVersion) throw new NotFoundException("Source document version not found");
+    const source = await this.s3.getObject(baseVersion.storageKey);
 
-    const pdfDoc = await PDFDocument.load(source.body);
+    const pdfDoc = await PDFDocument.load(source.body, { ignoreEncryption: true });
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const signaturesByField = new Map(envelope.signatures.map((s) => [s.fieldId, s]));
@@ -373,7 +376,11 @@ export class EnvelopesService {
       }
     }
 
-    return { file: Buffer.from(await pdfDoc.save()) };
+    const output = Buffer.from(await pdfDoc.save());
+    this.logger.log(
+      `Envelope download merge envelope=${envelopeId} baseKey=${baseVersion.storageKey} fields=${envelope.fields.length} signatures=${envelope.signatures.length} bytes=${output.length}`
+    );
+    return { file: output };
   }
 
   async dashboard(userId: string) {

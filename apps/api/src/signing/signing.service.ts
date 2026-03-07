@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomUUID } from "crypto";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { PrismaService } from "../common/prisma.service";
@@ -9,6 +9,8 @@ import { SubmitSignatureDto } from "./dto/submit-signature.dto";
 
 @Injectable()
 export class SigningService {
+  private readonly logger = new Logger(SigningService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -39,6 +41,14 @@ export class SigningService {
         data: { status: "VIEWED", lastViewedAt: new Date() }
       });
     }
+    const actionableFields = await this.prisma.field.findMany({
+      where: {
+        envelopeId: recipient.envelopeId,
+        OR: [{ recipientId: recipient.id }, { recipientId: null }]
+      },
+      orderBy: { createdAt: "asc" }
+    });
+
     return {
       id: recipient.id,
       envelopeId: recipient.envelopeId,
@@ -49,7 +59,7 @@ export class SigningService {
         id: recipient.envelope.document.id,
         title: recipient.envelope.document.title
       },
-      fields: recipient.fields.map((f) => ({
+      fields: actionableFields.map((f) => ({
         id: f.id,
         type: f.type,
         label: f.label,
@@ -176,7 +186,7 @@ export class SigningService {
     ]);
     if (!recipient) throw new NotFoundException("Recipient not found");
 
-    const assigned = fields.filter((f) => f.recipientId === recipientId);
+    const assigned = fields.filter((f) => f.recipientId === recipientId || f.recipientId === null);
     const required = assigned.filter((f) => f.required);
     const isFieldCompleted = (fieldId: string) => {
       const field = assigned.find((f) => f.id === fieldId);
@@ -272,17 +282,23 @@ export class SigningService {
     const envelope = await this.prisma.envelope.findUnique({
       where: { id: envelopeId },
       include: {
-        document: { include: { versions: { orderBy: { createdAt: "desc" }, take: 1 } } },
+        document: { include: { versions: { orderBy: { createdAt: "desc" }, take: 20 } } },
         fields: true,
         signatures: { include: { recipient: true } }
       }
     });
     if (!envelope) throw new NotFoundException("Envelope not found");
-    const latestVersion = envelope.document.versions[0];
-    if (!latestVersion) throw new NotFoundException("Source document version not found");
+    const nonFinal = envelope.document.versions.find((v) => !v.storageKey.includes("/final-"));
+    const baseVersion = nonFinal || envelope.document.versions[0];
+    if (!baseVersion) throw new NotFoundException("Source document version not found");
 
-    const source = await this.s3.getObject(latestVersion.storageKey);
-    const pdfDoc = await PDFDocument.load(source.body);
+    const source = await this.s3.getObject(baseVersion.storageKey);
+    const pdfDoc = await PDFDocument.load(source.body, { ignoreEncryption: true });
+    const originalPageCount = pdfDoc.getPageCount();
+    if (originalPageCount === 0) {
+      this.logger.error(`Base PDF has 0 pages. envelope=${envelopeId} storageKey=${baseVersion.storageKey}`);
+      throw new NotFoundException("Base PDF has no pages");
+    }
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     const signaturesByField = new Map(envelope.signatures.map((s) => [s.fieldId, s]));
@@ -377,6 +393,9 @@ export class SigningService {
     }
 
     const output = Buffer.from(await pdfDoc.save());
+    this.logger.log(
+      `Final PDF generated envelope=${envelopeId} basePages=${originalPageCount} fields=${envelope.fields.length} signatures=${envelope.signatures.length} bytes=${output.length}`
+    );
     const storageKey = `documents/${envelope.documentId}/final-${envelopeId}-${randomUUID()}.pdf`;
     await this.s3.upload(storageKey, output, "application/pdf");
     const sha256 = createHash("sha256").update(output).digest("hex");
