@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { API_URL, api } from "@/lib/api";
 
 type Envelope = {
   id: string;
@@ -26,7 +26,7 @@ export function EnvelopeTrackingPage({ envelopeId }: { envelopeId: string }) {
   const [envelope, setEnvelope] = useState<Envelope | null>(null);
   const [documentMeta, setDocumentMeta] = useState<DocumentMeta | null>(null);
   const [mySigningUrl, setMySigningUrl] = useState<string | null>(null);
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
+  const apiBase = API_URL;
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(envelopeId);
 

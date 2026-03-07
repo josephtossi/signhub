@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { API_URL, api } from "@/lib/api";
 import { DraftField, DraftFieldType, PdfPrepareCanvas } from "@/components/pdf-prepare-canvas";
 
 type Recipient = {
@@ -42,7 +42,7 @@ type AiStatus = {
   provider?: "openai" | "ollama" | "heuristic";
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
+const API_BASE = API_URL;
 const FIELD_TYPES: DraftFieldType[] = ["SIGNATURE", "INITIAL", "DATE", "TEXT", "CHECKBOX"];
 
 function fieldLabel(type: DraftFieldType) {

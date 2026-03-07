@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { SignaturePad } from "@/components/signature-pad";
 import { PdfSignCanvas } from "@/components/pdf-sign-canvas";
-import { api } from "@/lib/api";
+import { API_URL, api } from "@/lib/api";
 
 type Session = {
   id: string;
@@ -45,7 +45,7 @@ export default function SignPage({ params }: { params: { token: string } }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [pdfError, setPdfError] = useState("");
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
+  const apiBase = API_URL;
 
   useEffect(() => {
     if (!token || token.length < 8) {

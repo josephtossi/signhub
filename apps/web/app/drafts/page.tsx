@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { API_URL, api } from "@/lib/api";
 
 type DraftEnvelope = {
   id: string;
@@ -12,7 +12,7 @@ type DraftEnvelope = {
   recipients: { id: string; fullName: string; email: string }[];
   fields: { id: string }[];
 };
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/v1";
+const API_BASE = API_URL;
 
 export default function DraftsPage() {
   const [drafts, setDrafts] = useState<DraftEnvelope[]>([]);
