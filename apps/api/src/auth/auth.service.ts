@@ -44,7 +44,7 @@ export class AuthService {
     if (!user) throw new UnauthorizedException("Invalid credentials");
     const ok = await compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
-    const roles = user.memberships.map((m) => m.role);
+    const roles = user.memberships.map((m: { role: string }) => m.role);
     return this.issueTokens(user.id, user.email, roles.length ? roles : ["MEMBER"]);
   }
 

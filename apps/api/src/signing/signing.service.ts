@@ -53,13 +53,13 @@ export class SigningService {
   private async upsertUserDefaultSignature(userId: string, imageBase64: string) {
     await this.ensureUserSignatureTable();
     const now = new Date().toISOString();
-    const existing = await this.prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    const existing = (await this.prisma.$queryRawUnsafe(
       `SELECT "id" FROM "UserSignature"
        WHERE "userId" = ?
        ORDER BY "updatedAt" DESC, "createdAt" DESC
        LIMIT 1`,
       userId
-    );
+    )) as Array<{ id: string }>;
     if (existing[0]?.id) {
       await this.prisma.$executeRawUnsafe(
         `UPDATE "UserSignature" SET "image" = ?, "updatedAt" = ? WHERE "id" = ?`,
@@ -106,7 +106,7 @@ export class SigningService {
         data: { status: "VIEWED", lastViewedAt: new Date() }
       });
     }
-    const signerCount = recipient.envelope.recipients.filter((r) => this.isSignerRole(r.role)).length;
+    const signerCount = recipient.envelope.recipients.filter((r: { role: string | null }) => this.isSignerRole(r.role)).length;
     const allowUnassignedSignatureFields = signerCount <= 1;
     const actionableFields = await this.prisma.field.findMany({
       where: {
@@ -130,7 +130,7 @@ export class SigningService {
         id: recipient.envelope.document.id,
         title: recipient.envelope.document.title
       },
-      fields: actionableFields.map((f) => ({
+      fields: actionableFields.map((f: any) => ({
         id: f.id,
         type: f.type,
         label: f.label,
@@ -155,7 +155,7 @@ export class SigningService {
       throw new ConflictException("This recipient has already signed and cannot sign again.");
     }
     const allRecipients = await this.prisma.recipient.findMany({ where: { envelopeId: recipient.envelopeId } });
-    const signerCount = allRecipients.filter((r) => this.isSignerRole(r.role)).length;
+    const signerCount = allRecipients.filter((r: { role: string | null }) => this.isSignerRole(r.role)).length;
     const allowUnassignedSignatureFields = signerCount <= 1;
 
     let field = await this.prisma.field.findFirst({
@@ -306,7 +306,7 @@ export class SigningService {
     meta: { ipAddress?: string; userAgent?: string },
     requireAllFields = false
   ) {
-    const txResult = await this.prisma.$transaction(async (tx) => {
+    const txResult = await this.prisma.$transaction(async (tx: any) => {
       const [recipient, envelope, fields, signatures, recipients] = await Promise.all([
         tx.recipient.findUnique({ where: { id: recipientId } }),
         tx.envelope.findUnique({ where: { id: envelopeId } }),
@@ -317,26 +317,26 @@ export class SigningService {
       if (!recipient) throw new NotFoundException("Recipient not found");
       if (!envelope) throw new NotFoundException("Envelope not found");
 
-      const signerRecipients = recipients.filter((r) => this.isSignerRole(r.role));
+      const signerRecipients = recipients.filter((r: { role: string | null }) => this.isSignerRole(r.role));
       const allowUnassignedSignatureFields = signerRecipients.length <= 1;
       const assignedToRecipient = fields.filter(
-        (f) =>
+        (f: any) =>
           f.recipientId === recipientId ||
           (f.recipientId === null &&
             (!this.isSignatureFieldType(f.type) || allowUnassignedSignatureFields))
       );
-      const required = assignedToRecipient.filter((f) => f.required);
+      const required = assignedToRecipient.filter((f: { required: boolean }) => f.required);
       const isFieldCompleted = (field: (typeof fields)[number]) => {
         if (field.type === "SIGNATURE" || field.type === "INITIAL") {
-          return signatures.some((s) => s.fieldId === field.id && s.recipientId === recipientId);
+          return signatures.some((s: { fieldId: string; recipientId: string | null }) => s.fieldId === field.id && s.recipientId === recipientId);
         }
         if (field.type === "CHECKBOX") return field.value === "true";
         return Boolean(field.value && String(field.value).trim().length > 0);
       };
 
-      const allRequiredDone = required.every((f) => isFieldCompleted(f));
+      const allRequiredDone = required.every((f: any) => isFieldCompleted(f));
 
-      const requiredSignerIds = signerRecipients.map((r) => r.id);
+      const requiredSignerIds = signerRecipients.map((r: { id: string }) => r.id);
 
       let justSigned = false;
       if (requireAllFields) {
@@ -351,8 +351,8 @@ export class SigningService {
       }
 
       const refreshedRecipients = await tx.recipient.findMany({ where: { envelopeId }, orderBy: { routingOrder: "asc" } });
-      const requiredUnsignedCount = requiredSignerIds.filter((id) => {
-        const r = refreshedRecipients.find((x) => x.id === id);
+      const requiredUnsignedCount = requiredSignerIds.filter((id: string) => {
+        const r = refreshedRecipients.find((x: { id: string; signedAt: Date | null }) => x.id === id);
         return !r?.signedAt;
       }).length;
 
@@ -380,20 +380,20 @@ export class SigningService {
 
       let nextRecipients: Array<{ email: string; fullName: string; accessToken: string | null; subject: string | null }> = [];
       if (envelope.signingOrder && requireAllFields && justSigned) {
-        const current = refreshedRecipients.find((r) => r.id === recipientId);
+        const current = refreshedRecipients.find((r: { id: string }) => r.id === recipientId);
         const pendingNextOrders = refreshedRecipients
           .filter(
-            (r) =>
+            (r: { role: string | null; signedAt: Date | null; routingOrder: number }) =>
               this.isSignerRole(r.role) &&
               !r.signedAt &&
               r.routingOrder > (current?.routingOrder || 0)
           )
-          .map((r) => r.routingOrder);
+          .map((r: { routingOrder: number }) => r.routingOrder);
         const nextOrder = pendingNextOrders.length ? Math.min(...pendingNextOrders) : null;
         if (nextOrder !== null) {
           nextRecipients = refreshedRecipients
-            .filter((r) => this.isSignerRole(r.role) && !r.signedAt && r.routingOrder === nextOrder)
-            .map((r) => ({
+            .filter((r: { role: string | null; signedAt: Date | null; routingOrder: number }) => this.isSignerRole(r.role) && !r.signedAt && r.routingOrder === nextOrder)
+            .map((r: { email: string; fullName: string; accessToken: string | null }) => ({
               email: r.email,
               fullName: r.fullName,
               accessToken: r.accessToken,
@@ -456,7 +456,7 @@ export class SigningService {
       }
     });
     if (!envelope) throw new NotFoundException("Envelope not found");
-    const nonFinal = envelope.document.versions.find((v) => !v.storageKey.includes("/final-"));
+    const nonFinal = envelope.document.versions.find((v: { storageKey: string }) => !v.storageKey.includes("/final-"));
     const baseVersion = nonFinal || envelope.document.versions[0];
     if (!baseVersion) throw new NotFoundException("Source document version not found");
 
@@ -489,8 +489,8 @@ export class SigningService {
       if (field.type === "SIGNATURE" || field.type === "INITIAL") {
         const candidates = signaturesByField.get(field.id) || [];
         const sig = field.recipientId
-          ? candidates.find((x) => x.recipientId === field.recipientId) || candidates[0]
-          : candidates.sort((a, b) => +new Date(b.signedAt) - +new Date(a.signedAt))[0];
+          ? candidates.find((x: { recipientId: string | null }) => x.recipientId === field.recipientId) || candidates[0]
+          : candidates.sort((a: { signedAt: Date }, b: { signedAt: Date }) => +new Date(b.signedAt) - +new Date(a.signedAt))[0];
         if (sig?.storageKey) {
           const imageFile = await this.s3.getObject(sig.storageKey);
           let embeddedImage;

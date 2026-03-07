@@ -80,7 +80,7 @@ export class EnvelopesService {
     });
     if (!envelope) throw new NotFoundException("Envelope not found");
     const isOwner = envelope.document.ownerUserId === userId;
-    const isRecipient = envelope.recipients.some((r) => this.normalizeEmail(r.email) === email);
+    const isRecipient = envelope.recipients.some((r: { email: string }) => this.normalizeEmail(r.email) === email);
     if (!isOwner && !isRecipient) throw new NotFoundException("Envelope not found");
     return envelope;
   }
@@ -143,9 +143,9 @@ export class EnvelopesService {
       orderBy: { updatedAt: "desc" }
     });
     if (scope === "owner") return rows;
-    return rows.filter((env) => {
+    return rows.filter((env: any) => {
       const isOwner = env.document.ownerUserId === userId;
-      const isRecipient = env.recipients.some((r) => this.normalizeEmail(r.email) === email);
+      const isRecipient = env.recipients.some((r: { email: string }) => this.normalizeEmail(r.email) === email);
       return scope === "inbox" ? isRecipient : isOwner || isRecipient;
     });
   }
@@ -155,24 +155,24 @@ export class EnvelopesService {
     if (draft.status === "COMPLETED") {
       throw new ForbiddenException("Completed envelopes cannot be sent");
     }
-    const signerCount = draft.recipients.filter((r) => this.isSignerRole(r.role)).length;
+    const signerCount = draft.recipients.filter((r: { role: string | null }) => this.isSignerRole(r.role)).length;
     if (signerCount > 1) {
       const unassignedSigningFields = draft.fields.filter(
-        (f) => (f.type === "SIGNATURE" || f.type === "INITIAL") && !f.recipientId
+        (f: { type: string; recipientId: string | null }) => (f.type === "SIGNATURE" || f.type === "INITIAL") && !f.recipientId
       );
       if (unassignedSigningFields.length > 0) {
         throw new ForbiddenException(
           "All signature/initial fields must be assigned to a recipient before sending multi-signer envelopes."
         );
       }
-      const signerIds = draft.recipients.filter((r) => this.isSignerRole(r.role)).map((r) => r.id);
+      const signerIds = draft.recipients.filter((r: { role: string | null }) => this.isSignerRole(r.role)).map((r: { id: string }) => r.id);
       const signFieldByRecipient = new Map<string, number>();
       for (const field of draft.fields) {
         if ((field.type === "SIGNATURE" || field.type === "INITIAL") && field.recipientId) {
           signFieldByRecipient.set(field.recipientId, (signFieldByRecipient.get(field.recipientId) || 0) + 1);
         }
       }
-      const missingRecipients = signerIds.filter((id) => (signFieldByRecipient.get(id) || 0) === 0);
+      const missingRecipients = signerIds.filter((id: string) => (signFieldByRecipient.get(id) || 0) === 0);
       if (missingRecipients.length > 0) {
         throw new ForbiddenException("Each signer must have at least one assigned signature or initials field before sending.");
       }
@@ -185,8 +185,8 @@ export class EnvelopesService {
     });
     const recipientsToNotify = envelope.signingOrder
       ? (() => {
-          const firstOrder = Math.min(...envelope.recipients.map((r) => r.routingOrder));
-          return envelope.recipients.filter((r) => r.routingOrder === firstOrder);
+          const firstOrder = Math.min(...envelope.recipients.map((r: { routingOrder: number }) => r.routingOrder));
+          return envelope.recipients.filter((r: { routingOrder: number }) => r.routingOrder === firstOrder);
         })()
       : envelope.recipients;
 
@@ -210,7 +210,7 @@ export class EnvelopesService {
       throw new ForbiddenException("Recipients can only be edited for draft envelopes");
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
       await tx.recipient.deleteMany({ where: { envelopeId } });
       if (recipients.length > 0) {
         await tx.recipient.createMany({
@@ -240,10 +240,10 @@ export class EnvelopesService {
       throw new ForbiddenException("Fields can only be edited for draft envelopes");
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
       const existing = await tx.field.findMany({ where: { envelopeId }, select: { id: true } });
       const incomingIds = dto.fields.map((f) => f.id).filter((x): x is string => Boolean(x));
-      const removableIds = existing.map((f) => f.id).filter((id) => !incomingIds.includes(id));
+      const removableIds = existing.map((f: { id: string }) => f.id).filter((id: string) => !incomingIds.includes(id));
 
       if (removableIds.length) {
         await tx.field.deleteMany({ where: { envelopeId, id: { in: removableIds } } });
@@ -264,7 +264,7 @@ export class EnvelopesService {
           value: f.value || null
         };
 
-        if (f.id && existing.some((x) => x.id === f.id)) {
+        if (f.id && existing.some((x: { id: string }) => x.id === f.id)) {
           await tx.field.update({ where: { id: f.id }, data });
           continue;
         }
@@ -293,7 +293,7 @@ export class EnvelopesService {
     const email = await this.resolveUserEmail(userId);
     const envelope = await this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
     const recipient = envelope.recipients.find(
-      (r) =>
+      (r: { email: string; role: string | null; status: string; accessToken: string | null }) =>
         r.email.toLowerCase() === email.toLowerCase() &&
         this.isSignerRole(r.role) &&
         r.status !== "SIGNED" &&
@@ -312,7 +312,7 @@ export class EnvelopesService {
 
   async downloadLatest(userId: string, envelopeId: string) {
     const envelope = await this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
-    const nonFinal = envelope.document.versions.find((v) => !v.storageKey.includes("/final-"));
+    const nonFinal = envelope.document.versions.find((v: { storageKey: string }) => !v.storageKey.includes("/final-"));
     const baseVersion = nonFinal || envelope.document.versions[0];
     if (!baseVersion) throw new NotFoundException("Source document version not found");
     const source = await this.s3.getObject(baseVersion.storageKey);
@@ -326,7 +326,9 @@ export class EnvelopesService {
       list.push(sig);
       signaturesByField.set(sig.fieldId, list);
     }
-    const recipientsById = new Map(envelope.recipients.map((r) => [r.id, r]));
+    const recipientsById = new Map<string, { fullName: string; email: string }>(
+      envelope.recipients.map((r: { id: string; fullName: string; email: string }) => [r.id, { fullName: r.fullName, email: r.email }])
+    );
 
     for (const field of envelope.fields) {
       const pageIndex = Math.max(0, field.page - 1);
@@ -341,8 +343,8 @@ export class EnvelopesService {
       if (field.type === "SIGNATURE" || field.type === "INITIAL") {
         const candidates = signaturesByField.get(field.id) || [];
         const sig = field.recipientId
-          ? candidates.find((x) => x.recipientId === field.recipientId) || candidates[0]
-          : candidates.sort((a, b) => +new Date(b.signedAt) - +new Date(a.signedAt))[0];
+          ? candidates.find((x: { recipientId: string | null }) => x.recipientId === field.recipientId) || candidates[0]
+          : candidates.sort((a: { signedAt: Date }, b: { signedAt: Date }) => +new Date(b.signedAt) - +new Date(a.signedAt))[0];
         if (sig?.storageKey) {
           const imageFile = await this.s3.getObject(sig.storageKey);
           let embeddedImage;
@@ -365,7 +367,7 @@ export class EnvelopesService {
           const fullName = assignee?.fullName || "Signer";
           const initials = fullName
             .split(" ")
-            .map((x) => x.trim()[0])
+            .map((x: string) => x.trim()[0])
             .filter(Boolean)
             .join("")
             .slice(0, 3)
@@ -460,7 +462,7 @@ export class EnvelopesService {
         }
       })
     ]);
-    const needsMySignature = inboxRecipients.filter((r) => this.normalizeEmail(r.email) === normalizedEmail).length;
+    const needsMySignature = inboxRecipients.filter((r: { email: string }) => this.normalizeEmail(r.email) === normalizedEmail).length;
 
     const recent = await this.prisma.envelope.findMany({
       where: { document: { ownerUserId: userId } },
@@ -480,7 +482,7 @@ export class EnvelopesService {
         }
       }
     });
-    const nextToSign = nextToSignCandidates.find((r) => this.normalizeEmail(r.email) === normalizedEmail) || null;
+    const nextToSign = nextToSignCandidates.find((r: { email: string }) => this.normalizeEmail(r.email) === normalizedEmail) || null;
 
     return {
       counts: { needsMySignature, waitingForOthers, completed, drafts },

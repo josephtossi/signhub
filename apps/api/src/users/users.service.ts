@@ -100,16 +100,14 @@ export class UsersService {
 
   async getSignature(userId: string) {
     await this.ensureUserSignatureTable();
-    const rows = await this.prisma.$queryRawUnsafe<
-      Array<{ id: string; userId: string; image: string; createdAt: string; updatedAt: string }>
-    >(
+    const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT "id","userId","image","createdAt","updatedAt"
        FROM "UserSignature"
        WHERE "userId" = ?
        ORDER BY "updatedAt" DESC, "createdAt" DESC
        LIMIT 1`,
       userId
-    );
+    )) as Array<{ id: string; userId: string; image: string; createdAt: string; updatedAt: string }>;
     return rows[0] || null;
   }
 

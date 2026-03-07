@@ -15,13 +15,8 @@ export class PrismaService extends DatabaseClient implements OnModuleInit, OnMod
         ? `file:${join(__dirname, "../../../../packages/database/prisma/dev.db").replace(/\\/g, "/")}`
         : dbUrl;
 
-    super({
-      datasources: {
-        db: {
-          url: normalizedDbUrl
-        }
-      }
-    });
+    process.env.DATABASE_URL = normalizedDbUrl;
+    super();
   }
 
   async onModuleInit() {
