@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -146,21 +146,17 @@ export function PdfSignCanvas({
     return () => observers.forEach((observer) => observer.disconnect());
   }, [pages]);
 
-  const overlays = useMemo(
-    () =>
-      fields.map((f) => {
-        const size = displaySizes[f.page] || { w: 0, h: 0 };
-        return {
-          ...f,
-          left: f.x * size.w,
-          top: f.y * size.h,
-          w: f.width * size.w,
-          h: f.height * size.h,
-          completed: completedFieldIds.includes(f.id)
-        };
-      }),
-    [completedFieldIds, displaySizes, fields]
-  );
+  const overlays = fields.map((f) => {
+    const size = displaySizes[f.page] || { w: 0, h: 0 };
+    return {
+      ...f,
+      left: f.x * size.w,
+      top: f.y * size.h,
+      w: f.width * size.w,
+      h: f.height * size.h,
+      completed: completedFieldIds.includes(f.id)
+    };
+  });
 
   return (
     <div className="relative space-y-4">

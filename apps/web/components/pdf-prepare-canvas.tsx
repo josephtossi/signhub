@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -283,20 +283,16 @@ export function PdfPrepareCanvas({
     appendField(placingType, page, event.clientX, event.clientY);
   }
 
-  const renderedFields = useMemo(
-    () =>
-      fields.map((field) => {
-        const size = pageSizes[field.page] || { w: 0, h: 0 };
-        return {
-          ...field,
-          left: field.x * size.w,
-          top: field.y * size.h,
-          w: field.width * size.w,
-          h: field.height * size.h
-        };
-      }),
-    [fields, pageSizes]
-  );
+  const renderedFields = fields.map((field) => {
+    const size = pageSizes[field.page] || { w: 0, h: 0 };
+    return {
+      ...field,
+      left: field.x * size.w,
+      top: field.y * size.h,
+      w: field.width * size.w,
+      h: field.height * size.h
+    };
+  });
 
   return (
     <div className="relative space-y-4">
