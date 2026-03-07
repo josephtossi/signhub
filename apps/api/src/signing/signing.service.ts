@@ -27,6 +27,31 @@ export class SigningService {
     return t === "SIGNATURE" || t === "INITIAL";
   }
 
+  private getWebBaseUrl() {
+    return (
+      process.env.WEB_APP_URL ||
+      (process.env.NODE_ENV === "production"
+        ? "https://signhub-web-production.up.railway.app"
+        : "http://localhost:3001")
+    ).replace(/\/+$/, "");
+  }
+
+  private getApiBaseUrl() {
+    return (
+      process.env.API_BASE_URL ||
+      (process.env.NODE_ENV === "production"
+        ? "https://signhub-api-production.up.railway.app/v1"
+        : "http://localhost:4000/v1")
+    ).replace(/\/+$/, "");
+  }
+
+  private getSignBaseUrl() {
+    return (
+      process.env.SIGN_URL_BASE ||
+      `${this.getWebBaseUrl()}/sign`
+    ).replace(/\/+$/, "");
+  }
+
   private async ensureUserSignatureTable() {
     await this.prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "UserSignature" (
@@ -269,13 +294,13 @@ export class SigningService {
     }
 
     const state = await this.refreshEnvelopeProgress(recipient.envelopeId, recipient.id, meta, true);
-    const webBase = process.env.WEB_APP_URL || "http://localhost:3001";
+    const webBase = this.getWebBaseUrl();
     return {
       ok: true,
       ...state,
       envelopeId: recipient.envelopeId,
       trackingUrl: `${webBase}/envelopes/${recipient.envelopeId}/tracking`,
-      signedDocumentUrl: `${process.env.API_BASE_URL || "http://localhost:4000/v1"}/envelopes/${recipient.envelopeId}/download`
+      signedDocumentUrl: `${this.getApiBaseUrl()}/envelopes/${recipient.envelopeId}/download`
     };
   }
 
@@ -429,7 +454,7 @@ export class SigningService {
         template: "sign-request",
         data: {
           recipientName: next.fullName,
-          signingLink: `${process.env.SIGN_URL_BASE || "http://localhost:3001/sign"}/${next.accessToken}`
+          signingLink: `${this.getSignBaseUrl()}/${next.accessToken}`
         }
       });
     }

@@ -29,6 +29,14 @@ export class EnvelopesService {
     return (role || "").trim().toUpperCase() !== "CC";
   }
 
+  private getSignBaseUrl() {
+    const defaultWebBase =
+      process.env.NODE_ENV === "production"
+        ? "https://signhub-web-production.up.railway.app"
+        : "http://localhost:3001";
+    return (process.env.SIGN_URL_BASE || `${defaultWebBase}/sign`).replace(/\/+$/, "");
+  }
+
   private async resolveUserEmail(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -197,7 +205,7 @@ export class EnvelopesService {
         template: "sign-request",
         data: {
           recipientName: recipient.fullName,
-          signingLink: `${process.env.SIGN_URL_BASE || "http://localhost:3001/sign"}/${recipient.accessToken}`
+          signingLink: `${this.getSignBaseUrl()}/${recipient.accessToken}`
         }
       });
     }
@@ -302,7 +310,7 @@ export class EnvelopesService {
     if (!recipient) {
       return { canSign: false, reason: "No pending signature assigned to this user." };
     }
-    const signBase = process.env.SIGN_URL_BASE || "http://localhost:3001/sign";
+    const signBase = this.getSignBaseUrl();
     return {
       canSign: true,
       recipientId: recipient.id,
