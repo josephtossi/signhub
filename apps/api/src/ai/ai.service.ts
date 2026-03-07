@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
 import pdfParse from "pdf-parse";
 import { DocumentsService } from "../documents/documents.service";
 import { AIProvider, AiAnalysisResult } from "../services/ai/providers/ai-provider.interface";
@@ -22,6 +22,9 @@ export class AiService {
   }
 
   async analyzeDocument(documentId: string): Promise<AiAnalysisResult> {
+    if (!documentId?.trim()) {
+      throw new BadRequestException("documentId is required");
+    }
     const text = await this.getDocumentText(documentId);
     const provider = await this.resolveProvider();
     const condensed = await this.prepareLargeDocumentContext(text, provider);
@@ -36,6 +39,12 @@ export class AiService {
   }
 
   async chat(documentId: string, question: string) {
+    if (!documentId?.trim()) {
+      throw new BadRequestException("documentId is required");
+    }
+    if (!question?.trim()) {
+      throw new BadRequestException("question is required");
+    }
     const text = await this.getDocumentText(documentId);
     const provider = await this.resolveProvider();
     const condensed = await this.prepareLargeDocumentContext(text, provider);
@@ -55,6 +64,9 @@ export class AiService {
   }
 
   async explainClause(clause: string) {
+    if (!clause?.trim()) {
+      throw new BadRequestException("clause is required");
+    }
     const provider = await this.resolveProvider();
     try {
       const explanation = await provider.explainClause("", clause);
@@ -68,13 +80,23 @@ export class AiService {
   private async getDocumentText(documentId: string) {
     const cached = this.docTextCache.get(documentId);
     if (cached) return cached;
-
-    const latest = await this.documentsService.getLatestFile(documentId);
-    if (!latest?.file) throw new NotFoundException("Document file not found");
-    const parsed = await pdfParse(latest.file);
-    const text = parsed.text || "";
-    this.docTextCache.set(documentId, text);
-    return text;
+    try {
+      const latest = await this.documentsService.getLatestFile(documentId);
+      if (!latest?.file) throw new NotFoundException("Document file not found");
+      const parsed = await pdfParse(latest.file);
+      const text = (parsed.text || "").trim();
+      if (!text) {
+        throw new BadRequestException("No extractable text found in this PDF. Try a text-based PDF file.");
+      }
+      this.docTextCache.set(documentId, text);
+      return text;
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(`Failed to extract document text for ${documentId}: ${(error as Error).message}`);
+      throw new InternalServerErrorException("Failed to read document text for AI analysis");
+    }
   }
 
   private heuristicAnswer(text: string, question: string) {
