@@ -83,6 +83,13 @@ export class AiService {
     try {
       const latest = await this.documentsService.getLatestFile(documentId);
       if (!latest?.file) throw new NotFoundException("Document file not found");
+      if (latest.file.length < 5) {
+        throw new BadRequestException("Document file is empty or corrupted");
+      }
+      const pdfHeader = latest.file.subarray(0, 5).toString("utf8");
+      if (!pdfHeader.startsWith("%PDF-")) {
+        throw new BadRequestException("Stored file is not a valid PDF");
+      }
       const parsed = await pdfParse(latest.file);
       const text = (parsed.text || "").trim();
       if (!text) {
@@ -94,8 +101,19 @@ export class AiService {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
-      this.logger.error(`Failed to extract document text for ${documentId}: ${(error as Error).message}`);
-      throw new InternalServerErrorException("Failed to read document text for AI analysis");
+      const err = error as { message?: string; code?: string; name?: string };
+      const msg = (err.message || "").toLowerCase();
+      const code = (err.code || "").toLowerCase();
+      if (code.includes("enoent") || msg.includes("nosuchkey") || msg.includes("not found")) {
+        throw new NotFoundException("Document binary not found in storage. Please re-upload the document.");
+      }
+      if (msg.includes("invalid pdf") || msg.includes("xref") || msg.includes("formaterror") || msg.includes("bad xref")) {
+        throw new BadRequestException("PDF parsing failed. Please upload a standard text-based PDF.");
+      }
+      this.logger.error(`Failed to extract document text for ${documentId}: ${err.message || "unknown error"}`);
+      throw new InternalServerErrorException(
+        `Failed to read document text for AI analysis: ${err.message || "unknown error"}`
+      );
     }
   }
 
