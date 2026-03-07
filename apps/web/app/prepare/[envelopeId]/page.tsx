@@ -356,7 +356,7 @@ export default function PreparePage({ params }: { params: { envelopeId: string }
 
         <div className="mt-5 grid gap-2">
           <a
-            href={fileUrl || "#"}
+            href={`${API_BASE}/envelopes/${envelope.id}/download`}
             target="_blank"
             rel="noreferrer"
             className="rounded-md border border-slate-300 bg-white px-3 py-2 text-center text-sm font-medium text-slate-700"

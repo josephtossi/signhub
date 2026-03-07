@@ -1,6 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomBytes } from "crypto";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { PrismaService } from "../common/prisma.service";
+import { S3Service } from "../documents/s3.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { CreateEnvelopeDto } from "./dto/create-envelope.dto";
 import { SaveFieldsDto } from "./dto/save-fields.dto";
@@ -9,7 +11,8 @@ import { SaveFieldsDto } from "./dto/save-fields.dto";
 export class EnvelopesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly s3: S3Service
   ) {}
 
   private async resolveUserEmail(userId: string) {
@@ -57,7 +60,11 @@ export class EnvelopesService {
         },
         recipients: { orderBy: { routingOrder: "asc" } },
         fields: { orderBy: { createdAt: "asc" } },
-        signatures: true
+        signatures: {
+          include: {
+            recipient: { select: { fullName: true, email: true } }
+          }
+        }
       }
     });
     if (!envelope) throw new NotFoundException("Envelope not found");
@@ -240,6 +247,94 @@ export class EnvelopesService {
 
   getById(userId: string, envelopeId: string) {
     return this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
+  }
+
+  async downloadLatest(userId: string, envelopeId: string) {
+    const envelope = await this.getAccessibleEnvelopeOrThrow(userId, envelopeId);
+    const latestVersion = envelope.document.versions[0];
+    if (!latestVersion) throw new NotFoundException("Source document version not found");
+    const source = await this.s3.getObject(latestVersion.storageKey);
+
+    const pdfDoc = await PDFDocument.load(source.body);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const signaturesByField = new Map(envelope.signatures.map((s) => [s.fieldId, s]));
+
+    for (const field of envelope.fields) {
+      const pageIndex = Math.max(0, field.page - 1);
+      const page = pdfDoc.getPage(pageIndex);
+      if (!page) continue;
+      const { width: pageWidth, height: pageHeight } = page.getSize();
+      const x = field.x * pageWidth;
+      const w = Math.max(1, field.width * pageWidth);
+      const h = Math.max(1, field.height * pageHeight);
+      const y = pageHeight - field.y * pageHeight - h;
+
+      if (field.type === "SIGNATURE" || field.type === "INITIAL") {
+        const sig = signaturesByField.get(field.id);
+        if (sig?.storageKey) {
+          const imageFile = await this.s3.getObject(sig.storageKey);
+          let embeddedImage;
+          try {
+            embeddedImage = await pdfDoc.embedPng(imageFile.body);
+          } catch {
+            embeddedImage = await pdfDoc.embedJpg(imageFile.body);
+          }
+          page.drawImage(embeddedImage, { x, y, width: w, height: h });
+          const signedBy = sig.recipient?.fullName || sig.recipient?.email || "Signer";
+          page.drawText(`${signedBy} | ${new Date(sig.signedAt).toISOString()}`, {
+            x,
+            y: Math.max(0, y - 10),
+            size: 7,
+            font,
+            color: rgb(0.25, 0.25, 0.25)
+          });
+        } else {
+          page.drawRectangle({
+            x,
+            y,
+            width: w,
+            height: h,
+            borderColor: rgb(0.4, 0.4, 0.4),
+            borderWidth: 1
+          });
+          page.drawText(field.label || field.type, {
+            x: x + 2,
+            y: y + Math.max(2, h * 0.25),
+            size: 8,
+            font,
+            color: rgb(0.4, 0.4, 0.4)
+          });
+        }
+      } else if (field.type === "CHECKBOX") {
+        page.drawRectangle({
+          x,
+          y,
+          width: w,
+          height: h,
+          borderColor: rgb(0.2, 0.2, 0.2),
+          borderWidth: 1
+        });
+        if (field.value === "true") {
+          page.drawText("X", {
+            x: x + w * 0.28,
+            y: y + h * 0.2,
+            size: Math.max(10, Math.min(18, h * 0.8)),
+            font,
+            color: rgb(0.05, 0.05, 0.05)
+          });
+        }
+      } else if (field.value) {
+        page.drawText(field.value, {
+          x: x + 2,
+          y: y + Math.max(2, h * 0.25),
+          size: Math.max(8, Math.min(12, h * 0.55)),
+          font,
+          color: rgb(0.08, 0.08, 0.12)
+        });
+      }
+    }
+
+    return { file: Buffer.from(await pdfDoc.save()) };
   }
 
   async dashboard(userId: string) {

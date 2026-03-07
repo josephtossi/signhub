@@ -100,7 +100,7 @@ export default function TrackingIndexPage() {
           <div className="space-y-2">
             {inbox.map((item) => (
               <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
-                <p className="font-medium">{item.document.title}</p>
+                <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
                 <p className="text-xs text-slate-500">{item.status}</p>
               </Link>
             ))}
@@ -113,7 +113,7 @@ export default function TrackingIndexPage() {
           <div className="space-y-2">
             {sent.map((item) => (
               <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
-                <p className="font-medium">{item.document.title}</p>
+                <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
                 <p className="text-xs text-slate-500">{item.status}</p>
               </Link>
             ))}
@@ -126,7 +126,7 @@ export default function TrackingIndexPage() {
           <div className="space-y-2">
             {completed.map((item) => (
               <Link key={item.id} href={`/envelopes/${item.id}/tracking`} className="block rounded-md border border-slate-200 p-3 hover:bg-slate-50">
-                <p className="font-medium">{item.document.title}</p>
+                <p className="font-medium">{item.document?.title || "Untitled envelope"}</p>
                 <p className="text-xs text-slate-500">{item.status}</p>
               </Link>
             ))}

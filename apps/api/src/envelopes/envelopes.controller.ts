@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, Res, StreamableFile, UseGuards } from "@nestjs/common";
+import { Response } from "express";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CreateEnvelopeDto } from "./dto/create-envelope.dto";
@@ -47,6 +48,17 @@ export class EnvelopesController {
   @Get(":id")
   getById(@CurrentUser("sub") userId: string, @Param("id") id: string) {
     return this.envelopesService.getById(userId, id);
+  }
+
+  @Get(":id/download")
+  async download(@CurrentUser("sub") userId: string, @Param("id") id: string, @Res({ passthrough: true }) res: Response) {
+    const result = await this.envelopesService.downloadLatest(userId, id);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Cache-Control": "no-store",
+      "Content-Disposition": `attachment; filename="signhub-${id}.pdf"`
+    });
+    return new StreamableFile(result.file);
   }
 
   @Post(":id/recipients")

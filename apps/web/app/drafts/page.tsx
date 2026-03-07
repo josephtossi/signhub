@@ -57,7 +57,7 @@ export default function DraftsPage() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      window.open(`${API_BASE}/documents/${draft.document.id}/versions/latest/file`, "_blank", "noopener,noreferrer");
+                      window.open(`${API_BASE}/envelopes/${draft.id}/download`, "_blank", "noopener,noreferrer");
                     }}
                   >
                     Download Latest PDF

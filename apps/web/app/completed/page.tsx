@@ -51,7 +51,7 @@ export default function CompletedPage() {
                   </p>
                 </div>
                 <a
-                  href={`${API_BASE}/documents/${env.documentId}/versions/latest/file`}
+                  href={`${API_BASE}/envelopes/${env.id}/download`}
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100"
                   target="_blank"
                   rel="noreferrer"
