@@ -25,7 +25,23 @@ export class AiService {
     if (!documentId?.trim()) {
       throw new BadRequestException("documentId is required");
     }
-    const text = await this.getDocumentText(documentId);
+    let text = "";
+    try {
+      text = await this.getDocumentText(documentId);
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        this.logger.warn(`AI analyze fallback for ${documentId}: ${error.message}`);
+        return {
+          summary:
+            "AI could not access this document file in deployed storage. Re-upload the PDF to get full contract insights.",
+          clauses: [],
+          risks: ["Document binary unavailable for deep analysis."],
+          parties: [],
+          suggestedFields: []
+        };
+      }
+      throw error;
+    }
     const provider = await this.resolveProvider();
     const condensed = await this.prepareLargeDocumentContext(text, provider);
     try {
@@ -45,7 +61,19 @@ export class AiService {
     if (!question?.trim()) {
       throw new BadRequestException("question is required");
     }
-    const text = await this.getDocumentText(documentId);
+    let text = "";
+    try {
+      text = await this.getDocumentText(documentId);
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        this.logger.warn(`AI chat fallback for ${documentId}: ${(error as Error).message}`);
+        return {
+          answer:
+            "I cannot read this document in deployed storage right now. Please re-upload the PDF, then ask again."
+        };
+      }
+      throw error;
+    }
     const provider = await this.resolveProvider();
     const condensed = await this.prepareLargeDocumentContext(text, provider);
     const prompt = [
